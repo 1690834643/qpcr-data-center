@@ -15,7 +15,7 @@ A local-first data hub for Bio-Rad CFX96 qPCR exports. It organizes runs by proj
 ## 功能
 
 - **按项目和实验内容分类**：左栏项目树，实验卡片按「实验内容」筛选，可按项目、实验、基因名搜索。
-- **导入 CFX 导出**：Quantification Summary / Cq Results，xlsx 与 csv 均可。内参板与目的基因板分开跑也能按「样本 × 基因」自动合并。CFX 未填 Target 时可在导入时改基因名。
+- **导入 CFX 文件**：可直接拖入 CFX Maestro 原始 .pcrd 数据文件，也可用 Quantification Summary / Cq Results 导出的 xlsx 与 csv。内参板与目的基因板分开跑也能按「样本 × 基因」自动合并。CFX 未填 Target 时可在导入时改基因名。
 - **技术重复 QC**：复孔 SD 或极差阈值判定，三选二自动剔除离群孔，点击任意 Cq 手动剔除或恢复。NTC 出现扩增时单独提醒。
 - **ΔΔCt 与差异检验**：2 组用 Student t 检验，3 组及以上用单因素 ANOVA 接 Tukey HSD（全部两两比较）或 Dunnett（各组 vs 对照）由作者选择，时间序列逐点比较经 Holm 校正，星号与字母法两种标注。统计内核与 scipy 对拍到机器精度。
 - **六个出图模板**：柱状 + 散点、箱线 + 散点、均值点图、多基因分组柱、log2FC 热图、时间序列折线。

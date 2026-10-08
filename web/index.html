@@ -345,7 +345,7 @@ function viewHome() {
       </div></div>
       <div class="card"><div class="card-b steps">
         <div class="step"><b>1</b><div><strong>建项目</strong>，按课题或实验内容分类，例如「敲低效率」「组织表达谱」。</div></div>
-        <div class="step"><b>2</b><div><strong>导入 CFX 文件</strong>，支持 Quantification Summary / Cq Results 的 xlsx 与 csv，多块板自动合并。</div></div>
+        <div class="step"><b>2</b><div><strong>导入 CFX 文件</strong>，支持原始 .pcrd 数据文件，以及 Quantification Summary / Cq Results 的 xlsx 与 csv，多块板自动合并。</div></div>
         <div class="step"><b>3</b><div><strong>确认内参、归一组与分组</strong>，结果实时预览，保存即写入项目 Excel。</div></div>
         <div class="step"><b>4</b><div><strong>选模板出图</strong>，一键套用风格预设，按单栏 / 双栏尺寸导出 SVG 或高清 PNG。</div></div>
       </div></div>
@@ -649,9 +649,9 @@ function viewEdit() {
       <div class="drop" id="drop" onclick="$('#file').click()">
         <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 16V4m0 0l-4 4m4-4l4 4M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3" stroke-linecap="round" stroke-linejoin="round"/></svg>
         <h3>${E.isNew ? '拖入 CFX 导出文件，或点击选择' : '追加更多板的文件（可选）'}</h3>
-        <div class="muted" style="font-size:12.5px">Quantification Summary / Cq Results，xlsx 或 csv，可多选。分几块板跑的一起拖进来，按「样本 × 基因」自动合并。</div>
+        <div class="muted" style="font-size:12.5px">CFX 原始 .pcrd 或 Quantification Summary / Cq Results 导出的 xlsx、csv，可多选。分几块板跑的一起拖进来，按「样本 × 基因」自动合并。</div>
       </div>
-      <input type="file" id="file" multiple accept=".xlsx,.csv" style="display:none" onchange="addFiles([...this.files]);this.value=''">
+      <input type="file" id="file" multiple accept=".xlsx,.csv,.pcrd" style="display:none" onchange="addFiles([...this.files]);this.value=''">
       <div class="flist" id="flist" style="margin-top:12px"></div>
     </div></div>
     <div id="edrest"></div>
@@ -684,7 +684,7 @@ const addFiles = guard(async fl => {
   renderFiles(); renderEdRest()
 })
 function guessName(names) {
-  const n = names[0].replace(/\.(xlsx|csv)$/i, '').replace(/\s*-\s*(Quantification.*|Cq Results.*)$/i, '').replace(/^admin_\d{4}-\d{2}-\d{2} [\d-]+_CT\d+(\.pcrd)?\s*/i, '').trim()
+  const n = names[0].replace(/\.(xlsx|csv|pcrd)$/i, '').replace(/\s*-\s*(Quantification.*|Cq Results.*)$/i, '').replace(/^admin_\d{4}-\d{2}-\d{2} [\d-]+_CT\d+(\.pcrd)?\s*/i, '').trim()
   return n || ''
 }
 function renderFiles() {

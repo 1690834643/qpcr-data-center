@@ -7,6 +7,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+import zipfile
 from xml.etree import ElementTree as ET
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -188,6 +189,53 @@ class UnitTest(unittest.TestCase):
         ws = q.parse_cfx(sorted(glob.glob(os.path.join(EXAMPLES, '*.csv')))[0])
         self.assertTrue(ws)
         self.assertTrue(all('cq' in w for w in ws))
+
+    _PCRD_XML = '''<?xml version="1.0" encoding="utf-8"?><experimentalData2>
+<dyeLayersList><dyeLayer plateName="SYBR" RowsCount="8" ColumnsCount="12" /></dyeLayersList>
+<wellSamples>
+<wellSample sampleId="" wellSampleType="wcSample" plateIndex="0" geneName="GAPDH" conditionName="CK" />
+<wellSample sampleId="" wellSampleType="wcStandard" plateIndex="1" geneName="GAPDH" conditionName="CK" />
+<wellSample sampleId="" wellSampleType="wcSample" plateIndex="12" geneName="IL6" conditionName="LPS" />
+<wellSample sampleId="" wellSampleType="wcEmpty" plateIndex="13" geneName="" conditionName="" />
+</wellSamples>
+<dataAnalysisParameters selectedStepNumber="2" selectedWellGroupName="g1" />
+<dataAnalysisParam WellGroupGUID="g0" StepNumber="2" wellGroupName="Group 1"><computedWellDataArray>
+<computedWellData pIndex="0" thresholdCycle="99.0" isComputed="True" /></computedWellDataArray></dataAnalysisParam>
+<dataAnalysisParam WellGroupGUID="g1" StepNumber="4" wellGroupName="All Wells"><computedWellDataArray>
+<computedWellData pIndex="0" thresholdCycle="88.0" isComputed="True" /></computedWellDataArray></dataAnalysisParam>
+<dataAnalysisParam WellGroupGUID="g1" StepNumber="2" wellGroupName="All Wells"><computedWellDataArray>
+<computedWellData pIndex="0" thresholdCycle="21.5" isComputed="True" />
+<computedWellData pIndex="1" thresholdCycle="NaN" isComputed="False" />
+<computedWellData pIndex="12" thresholdCycle="30.25" isComputed="True" /></computedWellDataArray></dataAnalysisParam>
+</experimentalData2>'''
+
+    def test_pcrd_parse(self):
+        """合成的 pcrd（ZIP 包 XML 与纯 XML 两种形态）按选中分析读出孔位、基因、样本与 Cq。"""
+        tmp = tempfile.mkdtemp()
+        try:
+            paths = []
+            p1 = os.path.join(tmp, 'a.pcrd')
+            with zipfile.ZipFile(p1, 'w') as z:
+                z.writestr('a.pcrd', self._PCRD_XML)
+            paths.append(p1)
+            p2 = os.path.join(tmp, 'b.pcrd')
+            with open(p2, 'w', encoding='utf-8-sig') as fh:
+                fh.write(self._PCRD_XML)
+            paths.append(p2)
+            for p in paths:
+                ws = q.parse_cfx(p)
+                by_well = {w['well']: w for w in ws}
+                self.assertEqual(sorted(by_well), ['A01', 'A02', 'B01'], p)  # wcEmpty 跳过
+                self.assertEqual(by_well['A01']['cq'], 21.5, p)             # 选中分析而非其它组 / 熔解步骤
+                self.assertEqual((by_well['A01']['target'], by_well['A01']['sample'], by_well['A01']['content']),
+                                 ('GAPDH', 'CK', 'Unkn'), p)
+                self.assertEqual(by_well['A01']['fluor'], 'SYBR', p)
+                self.assertIsNone(by_well['A02']['cq'], p)                  # NaN / 未计算 -> 缺失
+                self.assertEqual(by_well['A02']['content'], 'Std', p)
+                self.assertEqual(by_well['B01']['cq'], 30.25, p)            # 行优先编号：12 -> B01
+                self.assertEqual((by_well['B01']['target'], by_well['B01']['sample']), ('IL6', 'LPS'), p)
+        finally:
+            shutil.rmtree(tmp)
 
 
 if __name__ == '__main__':

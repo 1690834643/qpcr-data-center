@@ -644,11 +644,122 @@ def _natural_key(s):
     return [int(t) if t.isdigit() else t for t in re.split(r'(\d+)', s)]
 
 
+# CFX Maestro 的 .pcrd 是固定密码加密的 ZIP，内层为单个 XML
+PCRD_PASSWORD = b'SecureCompressDecompressKeyiQ5V4Files!!##$$'
+
+_PCRD_SAMPLE_TYPE = {'wcSample': 'Unkn', 'wcStandard': 'Std', 'wcNTC': 'NTC',
+                     'wcPosCtrl': 'PosCtrl', 'wcNegCtrl': 'NegCtrl'}
+
+
+def _read_pcrd_xml(path):
+    """读取 pcrd 内层 XML。新版为加密 ZIP 包单个 XML，旧版可能直接是 XML 文本。"""
+    with open(path, 'rb') as fh:
+        raw = fh.read()
+    if raw[:2] != b'PK':
+        try:
+            return raw.decode('utf-8-sig')
+        except UnicodeDecodeError:
+            raise ValueError('无法识别的 pcrd 文件（既不是加密 ZIP 也不是 XML）')
+    z = zipfile.ZipFile(io.BytesIO(raw))
+    try:
+        names = [n for n in z.namelist() if not n.endswith('/')]
+        if not names:
+            raise ValueError('pcrd 压缩包为空')
+        data = None
+        for pwd in (None, PCRD_PASSWORD):
+            try:
+                data = z.read(names[0]) if pwd is None else z.read(names[0], pwd=pwd)
+                break
+            except RuntimeError:
+                continue
+        if data is None:
+            raise ValueError('pcrd 解密失败（文件损坏或密码已变更）')
+        return data.decode('utf-8-sig', 'replace')
+    finally:
+        z.close()
+
+
+def parse_pcrd(path):
+    """解析 CFX Maestro 原始 .pcrd 数据文件。
+    孔位索引为行优先（0=A01, 1=A02, …）；Cq 取软件当前选中分析
+    （dataAnalysisParameters 记录的孔组与步骤）下的 thresholdCycle。
+    返回与 parse_cfx 相同的 list[dict(well, fluor, target, content, sample, cq)]。"""
+    try:
+        root = ET.fromstring(_read_pcrd_xml(path))
+    except ET.ParseError as e:
+        raise ValueError(f'pcrd 内容不是有效 XML：{e}')
+    layers = list(root.iter('dyeLayer'))
+    if not layers:
+        raise ValueError('pcrd 中找不到板信息（dyeLayer）')
+    fluors = [l.get('plateName') or '' for l in layers]
+    if len([f for f in fluors if f]) > 1:
+        raise ValueError(f'该 pcrd 含多个荧光通道（{"、".join(fluors)}），暂不支持直接导入；'
+                         '请先在 CFX Maestro 中导出 Quantification Summary（xlsx/csv）再导入')
+    rows, cols = int(layers[0].get('RowsCount') or 8), int(layers[0].get('ColumnsCount') or 12)
+    # 孔注释：plateIndex -> 基因 / 样本 / 孔类型
+    info = {}
+    for wsel in root.iter('wellSample'):
+        try:
+            info[int(wsel.get('plateIndex'))] = wsel.attrib
+        except (TypeError, ValueError):
+            continue
+    if not info:
+        raise ValueError('pcrd 中找不到孔注释（wellSample）')
+    # Cq：优先选「当前选中的孔组 + 选中的步骤」，退化为 All Wells 组或第一个有数据的分析
+    dap = next(root.iter('dataAnalysisParameters'), None)
+    sel_step = dap.get('selectedStepNumber') if dap is not None else None
+    sel_group = dap.get('selectedWellGroupName') if dap is not None else None
+    best = None
+    for p in root.iter('dataAnalysisParam'):
+        if next(p.iter('computedWellData'), None) is None:
+            continue
+        score = (p.get('WellGroupGUID') == sel_group, p.get('StepNumber') == sel_step,
+                 p.get('wellGroupName') == 'All Wells')
+        if best is None or score > best[0]:
+            best = (score, p)
+    cq_map = {}
+    if best is not None:
+        for cwd in best[1].iter('computedWellData'):
+            if cwd.get('isComputed') != 'True':
+                continue
+            try:
+                v = float(cwd.get('thresholdCycle'))
+                idx = int(cwd.get('pIndex'))
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(v):
+                cq_map[idx] = v
+    wells = []
+    for idx in sorted(info):
+        a = info[idx]
+        stype = a.get('wellSampleType', '')
+        if stype == 'wcEmpty':
+            continue
+        target = (a.get('geneName') or '').strip()
+        sample = (a.get('conditionName') or a.get('sampleId') or '').strip()
+        cq = cq_map.get(idx)
+        if not target and not sample and cq is None:
+            continue
+        r, c = divmod(idx, cols)
+        wells.append({'well': f'{chr(65 + r)}{c + 1:02d}',
+                      'fluor': '/'.join(f for f in fluors if f),
+                      'target': target,
+                      'content': _PCRD_SAMPLE_TYPE.get(stype, stype),
+                      'sample': sample,
+                      'cq': cq})
+    if not wells:
+        raise ValueError('pcrd 中没有有效孔')
+    return wells
+
+
 def parse_cfx(path):
-    """解析 CFX 导出（Quantification Summary 或 Cq Results）。
-    支持 .xlsx 与 .csv 两种导出格式。
+    """解析 CFX 文件（Quantification Summary / Cq Results 导出，或原始 .pcrd）。
+    支持 .xlsx、.csv 与 .pcrd 三种格式。
     返回 list[dict(well, fluor, target, content, sample, cq)]，仅保留有效 Cq 的孔。"""
-    rows = read_csv_rows(path) if str(path).lower().endswith('.csv') else read_xlsx_rows(path)
+    low = str(path).lower()
+    if low.endswith('.pcrd'):
+        return parse_pcrd(path)
+    rows = read_csv_rows(path) if low.endswith('.csv') else read_xlsx_rows(path)
     # 找表头行
     header_idx = None
     colmap = {}
