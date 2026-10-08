@@ -1,0 +1,826 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>qPCR 数据中心</title>
+<style>
+:root{
+  --bg:#F3EFE9; --panel:#FFFFFF; --panel2:#FAF7F3; --ink:#2A2521; --ink2:#5C544C; --muted:#9A9087;
+  --line:#E7E0D7; --line2:#D9D0C4; --accent:#7A5230; --accent2:#A8794B; --accent-soft:#F3E9DE;
+  --side:#29231E; --side2:#352D27; --side-ink:#E9DFD2; --side-muted:#A99B8B; --gold:#C9A27A;
+  --ok:#4F8A62; --ok-soft:#E7F1EA; --warn:#B9862D; --warn-soft:#FBF1DE; --bad:#B0493F; --bad-soft:#F8E6E3;
+  --serif:'Source Han Serif SC','Noto Serif SC','Source Han Serif CN','Songti SC','Microsoft YaHei UI','Microsoft YaHei',serif;
+  --sans:'Segoe UI','Microsoft YaHei UI','Microsoft YaHei','PingFang SC','Noto Sans SC',sans-serif;
+  --r:10px; --shadow:0 1px 2px rgba(60,40,20,.06),0 4px 16px rgba(60,40,20,.06);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:14px/1.55 var(--sans);-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+h1,h2,h3{font-family:var(--serif);font-weight:600;margin:0;letter-spacing:.02em}
+.num{font-variant-numeric:tabular-nums}
+.shell{display:grid;grid-template-columns:268px 1fr;height:100vh}
+
+/* ---------- 侧栏 ---------- */
+.side{background:var(--side);color:var(--side-ink);display:flex;flex-direction:column;min-height:0}
+.brand{padding:22px 20px 16px;border-bottom:1px solid #3B322B;cursor:pointer}
+.brand h1{font-size:19px;color:#F4EADD;display:flex;align-items:center;gap:10px}
+.brand h1 .logo{width:26px;height:26px;border-radius:7px;background:linear-gradient(140deg,#C9A27A,#7A5230);display:grid;place-items:center}
+.brand small{display:block;color:var(--side-muted);font-size:11.5px;margin-top:6px;letter-spacing:.06em}
+.side-search{padding:14px 16px 6px}
+.side-search input{width:100%;background:var(--side2);border:1px solid #43392F;border-radius:8px;padding:8px 11px;color:var(--side-ink);outline:none}
+.side-search input::placeholder{color:#8A7C6E}
+.side-search input:focus{border-color:var(--gold)}
+.plist{flex:1;overflow:auto;padding:6px 10px 12px}
+.plabel{font-size:11px;letter-spacing:.14em;color:#8A7C6E;padding:12px 10px 6px}
+.pitem{border-radius:8px;margin:2px 0}
+.phead{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;cursor:pointer;color:var(--side-ink)}
+.phead:hover{background:var(--side2)}
+.phead .caret{width:12px;color:var(--side-muted);transition:transform .15s;font-size:10px}
+.pitem.open .caret{transform:rotate(90deg)}
+.phead .pname{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.phead .cnt{font-size:11px;color:var(--side-muted);background:#3A3029;border-radius:9px;padding:0 7px}
+.pitem.active>.phead{background:#3D332B;color:#FFF6EA}
+.elist{display:none;padding:2px 0 6px 21px}
+.pitem.open .elist{display:block}
+.eitem{display:flex;gap:8px;align-items:baseline;padding:5px 10px;border-radius:7px;cursor:pointer;color:#CFC3B5;font-size:13px}
+.eitem:hover{background:var(--side2);color:#F4EADD}
+.eitem.active{background:#4A3D32;color:#FFF6EA;box-shadow:inset 2px 0 0 var(--gold)}
+.eitem .eid{font-size:10.5px;color:#8A7C6E;font-variant-numeric:tabular-nums}
+.eitem .en{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.side-foot{padding:12px 14px;border-top:1px solid #3B322B;display:flex;gap:8px}
+.side-foot button{flex:1;background:var(--side2);border:1px solid #473C33;color:var(--side-ink);border-radius:8px;padding:8px;cursor:pointer}
+.side-foot button:hover{border-color:var(--gold);color:#FFF}
+.side-foot .primary{background:var(--gold);border-color:var(--gold);color:#2A2119;font-weight:600}
+.side-foot .primary:hover{background:#D8B48D;color:#2A2119}
+
+/* ---------- 主区 ---------- */
+.main{overflow:auto;min-width:0}
+.page{max-width:1320px;margin:0 auto;padding:26px 34px 60px}
+.crumb{color:var(--muted);font-size:12.5px;margin-bottom:6px}
+.crumb a{color:var(--muted);cursor:pointer;text-decoration:none}
+.crumb a:hover{color:var(--accent)}
+.titlebar{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+.titlebar h2{font-size:25px;flex:1;min-width:240px}
+.titlebar .sub{color:var(--ink2);font-size:13px;margin-top:4px;font-family:var(--sans);font-weight:400;letter-spacing:0}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line2);background:var(--panel);border-radius:8px;padding:7px 13px;cursor:pointer;white-space:nowrap;transition:all .12s}
+.btn:hover{border-color:var(--accent2);color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{background:#68441F;color:#fff}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--ink2)}
+.btn.ghost:hover{background:var(--accent-soft);color:var(--accent)}
+.btn.danger:hover{border-color:var(--bad);color:var(--bad)}
+.btn.sm{padding:4px 10px;font-size:12.5px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}
+.card-h{display:flex;align-items:center;gap:10px;padding:13px 18px;border-bottom:1px solid var(--line)}
+.card-h h3{font-size:15px;flex:1}
+.card-b{padding:16px 18px}
+.muted{color:var(--muted)}
+.tag{display:inline-block;font-size:11.5px;padding:1px 8px;border-radius:10px;background:var(--accent-soft);color:var(--accent);white-space:nowrap}
+.tag.gray{background:#EFEBE6;color:var(--ink2)}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line2);background:var(--panel);border-radius:16px;padding:3px 12px;cursor:pointer;font-size:12.5px;color:var(--ink2)}
+.chip:hover{border-color:var(--accent2)}
+.chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* 首页 */
+.hero{display:grid;grid-template-columns:1.3fr 1fr;gap:18px;margin-bottom:20px}
+.hero .card-b{padding:26px 28px}
+.hero h2{font-size:28px;margin-bottom:10px}
+.hero p{color:var(--ink2);margin:0 0 18px;max-width:560px}
+.steps{display:grid;gap:12px}
+.step{display:flex;gap:12px;align-items:flex-start}
+.step b{flex:none;width:24px;height:24px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-size:12px;font-family:var(--serif)}
+.step div{color:var(--ink2);font-size:13px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
+.stat{padding:16px 18px}
+.stat .v{font-family:var(--serif);font-size:28px;color:var(--accent);line-height:1.1}
+.stat .k{color:var(--muted);font-size:12px;margin-top:4px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px}
+.ecard{padding:16px 18px;cursor:pointer;transition:all .15s;display:flex;flex-direction:column;gap:8px}
+.ecard:hover{border-color:var(--accent2);transform:translateY(-1px)}
+.ecard .top{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.ecard h4{margin:0;font-size:15px;font-family:var(--serif);font-weight:600}
+.ecard .genes{display:flex;gap:4px;flex-wrap:wrap}
+.ecard .genes span{font-style:italic;font-size:12px;background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:0 6px;color:var(--ink2)}
+.ecard .foot{display:flex;gap:12px;color:var(--muted);font-size:12px;margin-top:2px}
+.empty{padding:50px 20px;text-align:center;color:var(--muted)}
+.empty h3{color:var(--ink2);margin-bottom:6px}
+
+/* 标签页 */
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line2);margin-bottom:18px}
+.tab{padding:9px 16px;cursor:pointer;color:var(--ink2);border-bottom:2px solid transparent;margin-bottom:-1px;display:flex;gap:6px;align-items:center}
+.tab:hover{color:var(--accent)}
+.tab.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+.tab .badge{font-size:10.5px;border-radius:8px;padding:0 6px;background:var(--bad-soft);color:var(--bad);font-weight:600}
+
+/* 表格 */
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{text-align:left;font-weight:600;color:var(--ink2);font-size:12px;background:var(--panel2);padding:8px 10px;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:1;white-space:nowrap}
+.tbl td{padding:7px 10px;border-bottom:1px solid #F0EBE4;vertical-align:middle}
+.tbl tr:hover td{background:#FCFAF7}
+.tbl .r{text-align:right;font-variant-numeric:tabular-nums}
+.tbl input[type=text],.tbl input:not([type]),.tbl input[type=number]{width:100%;border:1px solid transparent;background:transparent;border-radius:6px;padding:4px 7px}
+.tbl input:hover{border-color:var(--line2)}
+.tbl input:focus{border-color:var(--accent2);background:#fff;outline:none}
+.scroll{max-height:560px;overflow:auto;border-radius:0 0 var(--r) var(--r)}
+.st{display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:1px 8px;border-radius:10px;white-space:nowrap}
+.st.pass,.st.single{background:var(--ok-soft);color:var(--ok)}
+.st.fixed{background:var(--warn-soft);color:var(--warn)}
+.st.fail{background:var(--bad-soft);color:var(--bad)}
+.cq{display:inline-block;font-variant-numeric:tabular-nums;font-size:12px;border:1px solid var(--line2);border-radius:5px;padding:0 6px;margin:1px 3px 1px 0;cursor:pointer;background:#fff}
+.cq:hover{border-color:var(--accent2)}
+.cq.out{text-decoration:line-through;color:var(--warn);background:var(--warn-soft);border-color:#EED9AE}
+.cq.man{text-decoration:line-through;color:var(--bad);background:var(--bad-soft);border-color:#EBC5BF}
+.sig{font-weight:700;color:var(--accent)}
+.letters{font-family:var(--serif);font-weight:600;color:var(--accent)}
+
+/* 告警 */
+.notes{border-radius:var(--r);padding:12px 16px;margin-bottom:16px;background:var(--warn-soft);border:1px solid #EFDDB8;color:#7A5A1E;font-size:13px}
+.notes ul{margin:4px 0 0;padding-left:18px}
+.notes.ok{background:var(--ok-soft);border-color:#CFE3D5;color:#2F6040}
+
+/* 结果 */
+.res-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:16px}
+.gene-h{font-style:italic;font-family:var(--serif)}
+.mbar{height:8px;border-radius:4px;background:var(--accent2);opacity:.75}
+.mbar-wrap{width:120px;background:#F2EEE8;border-radius:4px}
+
+/* 作图 */
+.plot-layout{display:grid;grid-template-columns:340px 1fr;gap:18px;align-items:start}
+.ctrl{max-height:calc(100vh - 210px);overflow:auto}
+.sec{padding:14px 16px;border-bottom:1px solid var(--line)}
+.sec:last-child{border-bottom:none}
+.sec h4{margin:0 0 10px;font-size:12px;letter-spacing:.12em;color:var(--muted);font-weight:600}
+.tpls{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tpl{border:1px solid var(--line2);border-radius:8px;padding:8px 4px 6px;text-align:center;cursor:pointer;background:#fff;font-size:11.5px;color:var(--ink2);transition:all .12s}
+.tpl svg{display:block;margin:0 auto 4px;width:44px;height:30px}
+.tpl:hover{border-color:var(--accent2)}
+.tpl.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent);font-weight:600}
+.presets{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.preset{border:1px solid var(--line2);border-radius:8px;padding:6px 8px;cursor:pointer;background:#fff;font-size:12px;display:flex;flex-direction:column;gap:5px}
+.preset:hover{border-color:var(--accent2)}
+.preset.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.sw{display:flex;gap:2px}
+.sw i{flex:1;height:9px;border-radius:2px}
+.pal{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:7px;cursor:pointer;font-size:12px}
+.pal:hover{background:var(--panel2)}
+.pal.on{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.pal .sw{width:150px}
+.pal span{flex:1}
+.row{display:flex;align-items:center;gap:8px;margin:7px 0;font-size:13px}
+.row>label:first-child{width:62px;color:var(--ink2);flex:none;font-size:12.5px}
+.row input[type=text],.row input[type=number],.row select{flex:1;min-width:0;border:1px solid var(--line2);border-radius:7px;padding:5px 8px;background:#fff}
+.row input:focus,.row select:focus{outline:none;border-color:var(--accent2)}
+.seg{display:inline-flex;border:1px solid var(--line2);border-radius:8px;overflow:hidden;flex:1}
+.seg button{flex:1;border:none;background:#fff;padding:5px 6px;cursor:pointer;font-size:12px;color:var(--ink2);border-right:1px solid var(--line)}
+.seg button:last-child{border-right:none}
+.seg button.on{background:var(--accent);color:#fff}
+.gcolors{display:grid;gap:4px}
+.gc{display:flex;align-items:center;gap:7px;font-size:12.5px}
+.gc input[type=checkbox]{accent-color:var(--accent)}
+.gc input[type=color]{width:26px;height:22px;border:1px solid var(--line2);border-radius:5px;padding:0;background:none;cursor:pointer}
+.gc span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gc .mv{border:none;background:none;cursor:pointer;color:var(--muted);padding:0 3px}
+.gc .mv:hover{color:var(--accent)}
+.preview{position:sticky;top:12px}
+.paper-wrap{background:repeating-conic-gradient(#EFEAE3 0% 25%,#F6F2EC 0% 50%) 50%/18px 18px;border-radius:var(--r);padding:28px;display:flex;justify-content:center;align-items:center;min-height:440px;border:1px solid var(--line)}
+.paper{background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.08),0 12px 40px rgba(60,40,20,.10);line-height:0;max-width:100%}
+.paper svg{display:block;width:100%;height:auto}
+.pinfo{display:flex;justify-content:space-between;align-items:center;margin:10px 2px 0;color:var(--muted);font-size:12px;gap:10px;flex-wrap:wrap}
+.export{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.perr{color:var(--bad);padding:30px;line-height:1.6}
+
+/* 导入 */
+.drop{border:2px dashed var(--line2);border-radius:var(--r);padding:34px;text-align:center;cursor:pointer;background:var(--panel2);transition:all .15s}
+.drop:hover,.drop.over{border-color:var(--accent2);background:var(--accent-soft)}
+.drop h3{font-size:16px;margin:8px 0 4px}
+.drop svg{color:var(--accent2)}
+.form{display:grid;grid-template-columns:repeat(4,1fr);gap:12px 16px}
+.f{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--ink2)}
+.f.w2{grid-column:span 2}
+.f.w4{grid-column:span 4}
+.f input,.f select,.f textarea{border:1px solid var(--line2);border-radius:7px;padding:7px 10px;background:#fff;color:var(--ink);font-size:13.5px}
+.f input:focus,.f select:focus,.f textarea:focus{outline:none;border-color:var(--accent2);box-shadow:0 0 0 3px var(--accent-soft)}
+.f .hint{color:var(--muted);font-size:11.5px}
+.ed-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+.flist{display:grid;gap:8px}
+.fi{display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:8px 12px;background:#fff;font-size:13px}
+.fi .fn{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fi.err{border-color:#EBC5BF;background:var(--bad-soft)}
+.ren{display:flex;align-items:center;gap:6px;font-size:12.5px}
+.ren input{width:90px;border:1px solid var(--line2);border-radius:6px;padding:3px 7px}
+.ren.warn input{border-color:var(--warn);background:var(--warn-soft)}
+.batch{display:flex;gap:8px;align-items:center;padding:10px 14px;border-top:1px solid var(--line);background:var(--panel2);font-size:12.5px;flex-wrap:wrap}
+.batch input{border:1px solid var(--line2);border-radius:6px;padding:4px 8px;width:120px}
+.savebar{position:sticky;bottom:0;margin-top:18px;padding:12px 18px;display:flex;gap:10px;align-items:center;background:rgba(255,255,255,.92);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:var(--r);box-shadow:0 -4px 20px rgba(60,40,20,.06)}
+.savebar .info{flex:1;color:var(--ink2);font-size:13px}
+
+/* 弹窗 + 提示 */
+.mask{position:fixed;inset:0;background:rgba(30,22,16,.38);display:grid;place-items:center;z-index:50;animation:fade .15s}
+.dlg{background:#fff;border-radius:14px;width:min(460px,92vw);box-shadow:0 20px 60px rgba(0,0,0,.25);overflow:hidden}
+.dlg .card-b{display:grid;gap:12px}
+.dlg .foot{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;background:var(--panel2);border-top:1px solid var(--line)}
+.toast{position:fixed;right:22px;bottom:22px;z-index:60;display:grid;gap:8px}
+.toast div{background:#2A2521;color:#F4EADD;padding:10px 16px;border-radius:9px;box-shadow:0 8px 30px rgba(0,0,0,.2);font-size:13px;max-width:420px;animation:up .2s}
+.toast div.err{background:#8E3A32}
+@keyframes fade{from{opacity:0}}
+@keyframes up{from{opacity:0;transform:translateY(8px)}}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:rot .7s linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
+@media (max-width:1100px){.plot-layout{grid-template-columns:1fr}.ctrl{max-height:none}.hero{grid-template-columns:1fr}.ed-grid{grid-template-columns:1fr}.form{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="side">
+    <div class="brand" onclick="go('home')">
+      <h1><span class="logo"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="1.6"><path d="M1 13c3 0 4-9 7-9s3 6 7 6" stroke-linecap="round"/></svg></span>qPCR 数据中心</h1>
+      <small>CFX96 · ΔΔCt · 期刊出图</small>
+    </div>
+    <div class="side-search"><input id="q" placeholder="搜索项目 / 实验 / 基因" oninput="renderSide()"></div>
+    <div class="plist" id="plist"></div>
+    <div class="side-foot">
+      <button class="primary" onclick="dlgNewProject()">＋ 新建项目</button>
+      <button onclick="dlgSettings()" title="设置">设置</button>
+    </div>
+  </aside>
+  <main class="main" id="main"></main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict'
+const S = {meta:null, projects:[], view:'home', proj:null, eid:null, exp:null, tab:'res',
+           plot:null, svg:'', catFilter:'', ed:null, openProj:new Set()}
+const $ = s => document.querySelector(s)
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
+const fmt = (v, d=3) => v === null || v === undefined || Number.isNaN(v) ? '·' : Number(v).toFixed(d).replace(/^-(0\.?0*)$/, '$1')
+const fmtp = p => p === null || p === undefined ? '·' : (p < 0.0001 ? '<0.0001' : Number(p).toFixed(4))
+const natcmp = (a, b) => String(a).localeCompare(String(b), 'zh', {numeric:true})
+
+async function api(path, body) {
+  const opt = body === undefined ? {} : {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}
+  const r = await fetch(path, opt)
+  const j = await r.json().catch(() => ({error:'服务器无响应'}))
+  if (!r.ok) throw new Error(j.error || r.statusText)
+  return j
+}
+function toast(msg, err) {
+  const d = document.createElement('div')
+  if (err) d.className = 'err'
+  d.textContent = msg
+  $('#toast').appendChild(d)
+  setTimeout(() => d.remove(), err ? 6000 : 2800)
+}
+function guard(fn) {
+  return async (...a) => { try { return await fn(...a) } catch (e) { toast(e.message, true); console.error(e) } }
+}
+
+// ------------------------------------------------------------ 侧栏
+async function loadProjects() {
+  S.projects = (await api('/api/projects')).projects
+  renderSide()
+}
+function renderSide() {
+  const kw = ($('#q').value || '').trim().toLowerCase()
+  const hit = s => !kw || String(s).toLowerCase().includes(kw)
+  let h = '<div class="plabel">项目</div>'
+  if (!S.projects.length) h += '<div style="padding:8px 12px;color:#8A7C6E;font-size:12.5px">还没有项目，点下方「新建项目」开始。</div>'
+  for (const p of S.projects) {
+    const exps = p.experiments.filter(e => hit(p.name) || hit(e.name) || hit(e.category) || e.targets.some(hit))
+    if (kw && !exps.length && !hit(p.name)) continue
+    const open = S.openProj.has(p.name) || !!kw
+    h += `<div class="pitem ${open?'open':''} ${S.proj===p.name&&S.view==='project'?'active':''}">
+      <div class="phead" onclick="toggleProj('${esc(p.name)}')"><span class="caret">▶</span><span class="pname">${esc(p.name)}</span><span class="cnt">${p.n_exp}</span></div>
+      <div class="elist">${exps.map(e => `<div class="eitem ${S.proj===p.name&&S.eid===e.id&&S.view!=='project'?'active':''}" onclick="openExp('${esc(p.name)}','${e.id}')"><span class="eid">${e.id}</span><span class="en" title="${esc(e.name)}">${esc(e.name)||'未命名'}</span></div>`).join('')}</div>
+    </div>`
+  }
+  $('#plist').innerHTML = h
+}
+function toggleProj(name) {
+  if (S.openProj.has(name) && S.proj === name && S.view === 'project') S.openProj.delete(name)
+  else S.openProj.add(name)
+  S.proj = name; S.catFilter = ''
+  go('project')
+}
+
+// ------------------------------------------------------------ 路由
+function go(view) {
+  S.view = view
+  renderSide()
+  const m = $('#main')
+  m.scrollTop = 0
+  if (view === 'home') m.innerHTML = viewHome()
+  else if (view === 'project') m.innerHTML = viewProject()
+  else if (view === 'exp') { m.innerHTML = viewExp(); afterExp() }
+  else if (view === 'edit') { m.innerHTML = viewEdit(); afterEdit() }
+}
+const openExp = guard(async (proj, id, tab) => {
+  S.proj = proj; S.eid = id; S.openProj.add(proj)
+  S.exp = await api(`/api/experiment?project=${encodeURIComponent(proj)}&id=${id}`)
+  S.tab = tab || (S.view === 'exp' && S.eid === id ? S.tab : 'res')
+  S.plot = null
+  go('exp')
+})
+const curProject = () => S.projects.find(p => p.name === S.proj)
+
+// ------------------------------------------------------------ 首页
+function viewHome() {
+  const nexp = S.projects.reduce((a, p) => a + p.n_exp, 0)
+  const genes = new Set(); S.projects.forEach(p => p.experiments.forEach(e => e.targets.forEach(t => genes.add(t))))
+  const recent = S.projects.flatMap(p => p.experiments.map(e => ({...e, proj:p.name}))).sort((a, b) => natcmp(b.updated, a.updated)).slice(0, 6)
+  return `<div class="page">
+    <div class="hero">
+      <div class="card"><div class="card-b">
+        <h2>荧光定量数据中心</h2>
+        <p>把 CFX96 导出的结果按项目归档，自动完成技术重复质控、ΔΔCt 相对定量和差异检验，用期刊模板出图。所有数据存成 Excel，随时可以在表格里二次使用。</p>
+        <div class="actions"><button class="btn primary" onclick="dlgNewProject()">＋ 新建项目</button>
+        <button class="btn" onclick="api('/api/open_folder',{}).catch(e=>toast(e.message,true))">打开数据库文件夹</button></div>
+      </div></div>
+      <div class="card"><div class="card-b steps">
+        <div class="step"><b>1</b><div><strong>建项目</strong>，按课题或实验内容分类，例如「敲低效率」「组织表达谱」。</div></div>
+        <div class="step"><b>2</b><div><strong>导入 CFX 文件</strong>，支持 Quantification Summary / Cq Results 的 xlsx 与 csv，多块板自动合并。</div></div>
+        <div class="step"><b>3</b><div><strong>确认内参、归一组与分组</strong>，结果实时预览，保存即写入项目 Excel。</div></div>
+        <div class="step"><b>4</b><div><strong>选模板出图</strong>，一键套用风格预设，按单栏 / 双栏尺寸导出 SVG 或高清 PNG。</div></div>
+      </div></div>
+    </div>
+    <div class="stats">
+      <div class="card stat"><div class="v num">${S.projects.length}</div><div class="k">项目</div></div>
+      <div class="card stat"><div class="v num">${nexp}</div><div class="k">实验</div></div>
+      <div class="card stat"><div class="v num">${genes.size}</div><div class="k">检测基因</div></div>
+    </div>
+    ${recent.length ? `<h3 style="font-size:16px;margin:6px 0 12px">最近更新</h3><div class="grid">${recent.map(e => expCard(e, e.proj)).join('')}</div>` : ''}
+    <p class="muted" style="margin-top:28px;font-size:12px">数据库位置：${esc(S.meta.root)} · v${S.meta.version} · ${esc(S.meta.author)}</p>
+  </div>`
+}
+function expCard(e, proj) {
+  return `<div class="card ecard" onclick="openExp('${esc(proj)}','${e.id}')">
+    <div class="top">${e.category ? `<span class="tag">${esc(e.category)}</span>` : '<span class="tag gray">未分类</span>'}<span class="muted num" style="font-size:12px">${esc(e.date)}</span></div>
+    <h4>${esc(e.name) || '未命名实验'}</h4>
+    <div class="genes">${e.targets.map(t => `<span${t===e.ref?' title="内参"':''}>${esc(t)}${t===e.ref?' ·内参':''}</span>`).join('')}</div>
+    <div class="foot"><span>${e.id}</span><span>${e.n_groups} 组</span><span>${e.n_samples} 样本</span><span>${e.n_wells} 孔</span></div>
+  </div>`
+}
+
+// ------------------------------------------------------------ 项目页
+function viewProject() {
+  const p = curProject()
+  if (!p) return '<div class="page"><div class="empty">项目不存在</div></div>'
+  const cats = p.categories
+  const exps = p.experiments.filter(e => !S.catFilter || e.category === S.catFilter)
+  return `<div class="page">
+    <div class="crumb"><a onclick="go('home')">数据中心</a> / 项目</div>
+    <div class="titlebar"><div style="flex:1"><h2>${esc(p.name)}</h2><div class="sub">${esc(p.desc) || '共 ' + p.n_exp + ' 个实验'}${p.error ? ' · <span style="color:var(--bad)">' + esc(p.error) + '</span>' : ''}</div></div>
+      <div class="actions">
+        <button class="btn" onclick="guard(()=>api('/api/open_file',{project:S.proj}))()">在 Excel 中打开</button>
+        <button class="btn" onclick="guard(()=>api('/api/open_folder',{project:S.proj}))()">打开文件夹</button>
+        <button class="btn primary" onclick="newExp()">＋ 导入新实验</button>
+      </div></div>
+    ${cats.length ? `<div class="chips" style="margin-bottom:16px"><span class="chip ${!S.catFilter?'on':''}" onclick="S.catFilter='';go('project')">全部 ${p.n_exp}</span>${cats.map(c => `<span class="chip ${S.catFilter===c?'on':''}" onclick="S.catFilter='${esc(c)}';go('project')">${esc(c)} ${p.experiments.filter(e=>e.category===c).length}</span>`).join('')}</div>` : ''}
+    ${exps.length ? `<div class="grid">${exps.map(e => expCard(e, p.name)).join('')}</div>`
+      : `<div class="card empty"><h3>这个项目还没有实验</h3><p>导入一次 CFX96 运行的导出文件就能开始。</p><button class="btn primary" onclick="newExp()">＋ 导入新实验</button></div>`}
+  </div>`
+}
+
+// ------------------------------------------------------------ 实验页
+function viewExp() {
+  const {exp:e, analysis:a} = S.exp
+  const nfail = a.qc.filter(r => r.status === 'fail').length
+  const tabs = [['res','结果与差异'],['plot','作图'],['qc','技术重复 QC'],['raw','原始数据']]
+  return `<div class="page">
+    <div class="crumb"><a onclick="go('home')">数据中心</a> / <a onclick="go('project')">${esc(S.proj)}</a> / ${e.id}</div>
+    <div class="titlebar"><div style="flex:1"><h2>${esc(e.name) || '未命名实验'}</h2>
+      <div class="sub">${e.category ? `<span class="tag">${esc(e.category)}</span> ` : ''}${esc(e.date)} · 内参 <i>${esc(e.ref)||'未选'}</i> · 归一组 ${esc(e.ctrl)||'未选'}${e.notes ? ' · ' + esc(e.notes) : ''}</div></div>
+      <div class="actions"><button class="btn" onclick="editExp()">编辑设置与分组</button><button class="btn ghost danger" onclick="dlgDelete()">删除</button></div></div>
+    <div class="tabs">${tabs.map(([k, l]) => `<div class="tab ${S.tab===k?'on':''}" onclick="S.tab='${k}';go('exp')">${l}${k==='qc'&&nfail?`<span class="badge">${nfail}</span>`:''}</div>`).join('')}</div>
+    <div id="tabbody">${S.tab==='res'?tabRes(a):S.tab==='qc'?tabQC(a):S.tab==='raw'?tabRaw():tabPlot()}</div>
+  </div>`
+}
+function afterExp() { if (S.tab === 'plot') { renderCtrl(); refreshPlot() } }
+
+function warnBox(ws) {
+  if (!ws || !ws.length) return '<div class="notes ok">数据完整，未发现需要注意的问题。</div>'
+  return `<div class="notes"><strong>请注意</strong><ul>${ws.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>`
+}
+const METHOD = {'t-test':'Welch t 检验', 'anova':'单因素 ANOVA + Tukey HSD'}
+function tabRes(a) {
+  if (!a.targets.length) return warnBox(a.warnings) + '<div class="card empty"><h3>还没有结果</h3><p>请在「编辑设置与分组」里选择内参基因与归一组。</p></div>'
+  let h = warnBox(a.warnings) + '<div class="res-grid">'
+  for (const t of a.targets) {
+    const g = a.genes[t], st = g.stats
+    const mx = Math.max(...a.groups_order.map(k => g.groups[k]?.mean || 0), 1e-9)
+    h += `<div class="card"><div class="card-h"><h3 class="gene-h">${esc(t)}</h3><span class="muted" style="font-size:12px">${METHOD[st.method] || '未检验'}${st.p!==null&&st.method?' · 总体 p = ' + fmtp(st.p):''}</span></div>
+      <table class="tbl"><thead><tr><th>分组</th><th class="r">n</th><th class="r">RQ 均值</th><th class="r">SEM</th><th></th><th class="r">log2FC</th><th class="r">p vs 对照</th><th>标注</th></tr></thead><tbody>
+      ${a.groups_order.filter(k => g.groups[k]).map(k => { const d = g.groups[k]; const isC = k === a.ctrl
+        return `<tr><td>${esc(k)}${isC?' <span class="tag gray">对照</span>':''}</td><td class="r">${d.n}</td><td class="r">${fmt(d.mean)}</td><td class="r">${fmt(d.sem)}</td>
+        <td><div class="mbar-wrap"><div class="mbar" style="width:${Math.max(2, (d.mean||0)/mx*100)}%"></div></div></td>
+        <td class="r">${fmt(d.log2fc, 2)}</td><td class="r">${isC ? '' : fmtp(st.p_vs_control[k])}</td>
+        <td style="white-space:nowrap"><span class="sig">${isC ? '' : esc(st.stars_vs_control[k] || '')}</span> <span class="letters">${esc(st.letters[k] || '')}</span></td></tr>` }).join('')}
+      </tbody></table></div>`
+  }
+  h += '</div>'
+  h += `<div class="card" style="margin-top:16px"><div class="card-h"><h3>每个样本的 ΔΔCt</h3><span class="muted" style="font-size:12px">${a.per_sample.length} 行</span></div><div class="scroll"><table class="tbl"><thead><tr><th>样本</th><th>分组</th><th>基因</th><th class="r">内参 Cq</th><th class="r">目的 Cq</th><th class="r">ΔCt</th><th class="r">ΔΔCt</th><th class="r">RQ</th></tr></thead><tbody>
+    ${a.per_sample.map(v => `<tr><td>${esc(v.sample)}</td><td>${esc(v.group)}</td><td><i>${esc(v.target)}</i></td><td class="r">${fmt(v.ref_cq,2)}</td><td class="r">${fmt(v.tgt_cq,2)}</td><td class="r">${fmt(v.dct)}</td><td class="r">${fmt(v.ddct)}</td><td class="r">${fmt(v.rq,4)}</td></tr>`).join('')}
+  </tbody></table></div></div>`
+  return h
+}
+
+function tabQC(a) {
+  const s = a.qc_summary, p = a.params
+  const lbl = {pass:'合格', single:'单孔', fixed:'剔除后合格', fail:'离散超阈'}
+  const wellsOf = (r) => S.exp.wells.filter(w => w.sample === r.sample && w.target === r.target && w.cq !== null)
+  return `<div class="notes ok" style="display:flex;gap:22px;flex-wrap:wrap"><span>合格 <b>${s.pass}</b> 组</span><span>其中自动剔除离群 <b>${s.fixed}</b></span><span style="color:${s.fail?'var(--bad)':'inherit'}">离散超阈 <b>${s.fail}</b></span>
+    <span class="muted">阈值 ${p.metric==='range'?'极差':'SD'} ≤ ${p.thr}，${p.drop?'开启':'关闭'}三选二剔除。点击 Cq 可手动剔除或恢复该孔，自动保存并重算。</span></div>
+  <div class="card"><div class="scroll" style="max-height:none"><table class="tbl"><thead><tr><th>样本</th><th>分组</th><th>基因</th><th class="r">孔数</th><th class="r">Cq 均值</th><th class="r">SD</th><th class="r">极差</th><th>各孔 Cq</th><th>判定</th></tr></thead><tbody>
+  ${a.qc.map(r => `<tr><td>${esc(r.sample)}</td><td>${esc(r.group)}</td><td><i>${esc(r.target)}</i></td><td class="r">${r.n_raw}</td><td class="r">${fmt(r.mean,2)}</td><td class="r">${fmt(r.sd)}</td><td class="r">${fmt(r.range)}</td>
+    <td>${wellsOf(r).map(w => { const idx = S.exp.wells.indexOf(w); const out = !w.excluded && r.outliers.includes(w.cq)
+      return `<span class="cq ${w.excluded?'man':out?'out':''}" title="${esc(w.well)} ${esc(w.file)}${w.excluded?' · 已手动剔除':out?' · 自动剔除':''}" onclick="toggleWell(${idx})">${w.cq.toFixed(2)}</span>` }).join('')}</td>
+    <td><span class="st ${r.status}">${lbl[r.status]}</span></td></tr>`).join('')}
+  </tbody></table></div></div>`
+}
+const toggleWell = guard(async idx => {
+  const w = S.exp.wells[idx]
+  w.excluded = !w.excluded
+  await saveCurrent(`孔 ${w.well} 已${w.excluded ? '剔除' : '恢复'}，已重算`)
+})
+async function saveCurrent(msg) {
+  const {exp, wells, samples, gsets} = S.exp
+  await api('/api/experiment/save', {project:S.proj, exp, wells, samples, gsets})
+  await loadProjects()
+  await openExp(S.proj, S.eid, S.tab)
+  if (msg) toast(msg)
+}
+
+function tabRaw() {
+  const {wells, exp} = S.exp
+  return `<div class="card"><div class="card-h"><h3>原始孔数据</h3><span class="muted" style="font-size:12px">${wells.length} 孔 · 来源 ${esc((exp.files||[]).join('，') || '未记录')}</span>
+    <button class="btn sm" onclick="guard(()=>api('/api/open_folder',{project:S.proj,sub:'原始文件'}))()">打开原始文件夹</button></div>
+    <div class="scroll"><table class="tbl"><thead><tr><th>孔位</th><th>样本</th><th>分组</th><th>基因</th><th>类型</th><th class="r">Cq</th><th>来源文件</th><th>剔除</th></tr></thead><tbody>
+    ${wells.map(w => `<tr><td>${esc(w.well)}</td><td>${esc(w.sample)}</td><td>${esc(S.exp.samples[w.sample]||'')}</td><td><i>${esc(w.target)}</i></td><td>${esc(w.content)}</td><td class="r">${w.cq===null?'<span class="muted">无</span>':w.cq.toFixed(3)}</td><td class="muted" style="font-size:12px">${esc(w.file)}</td><td>${w.excluded?'<span class="st fail">是</span>':''}</td></tr>`).join('')}
+    </tbody></table></div></div>`
+}
+
+// ------------------------------------------------------------ 作图
+const TPL_ICON = {
+  bar:'<rect x="6" y="12" width="9" height="16" rx="1"/><rect x="19" y="5" width="9" height="23" rx="1"/><rect x="32" y="17" width="9" height="11" rx="1"/>',
+  box:'<line x1="11" y1="4" x2="11" y2="27"/><rect x="6" y="9" width="10" height="12" fill="#fff"/><line x1="6" y1="15" x2="16" y2="15"/><line x1="31" y1="8" x2="31" y2="25"/><rect x="26" y="12" width="10" height="9" fill="#fff"/><line x1="26" y1="17" x2="36" y2="17"/>',
+  dot:'<line x1="5" y1="15" x2="17" y2="15" stroke-width="2"/><circle cx="9" cy="12" r="1.6"/><circle cx="13" cy="18" r="1.6"/><circle cx="11" cy="14" r="1.6"/><line x1="27" y1="9" x2="39" y2="9" stroke-width="2"/><circle cx="31" cy="7" r="1.6"/><circle cx="35" cy="12" r="1.6"/><circle cx="33" cy="9" r="1.6"/>',
+  grouped:'<rect x="3" y="14" width="5" height="14"/><rect x="9" y="8" width="5" height="20" opacity=".55"/><rect x="24" y="18" width="5" height="10"/><rect x="30" y="5" width="5" height="23" opacity=".55"/>',
+  heatmap:'<rect x="4" y="3" width="11" height="8"/><rect x="16" y="3" width="11" height="8" opacity=".35"/><rect x="28" y="3" width="11" height="8" opacity=".7"/><rect x="4" y="12" width="11" height="8" opacity=".5"/><rect x="16" y="12" width="11" height="8"/><rect x="28" y="12" width="11" height="8" opacity=".25"/><rect x="4" y="21" width="11" height="8" opacity=".8"/><rect x="16" y="21" width="11" height="8" opacity=".4"/><rect x="28" y="21" width="11" height="8" opacity=".9"/>',
+  line:'<polyline points="4,24 15,12 27,17 40,5" fill="none" stroke-width="1.8"/><circle cx="4" cy="24" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="27" cy="17" r="2"/><circle cx="40" cy="5" r="2"/>',
+}
+function plotDefaults() {
+  const d = JSON.parse(JSON.stringify(S.meta.defaults))
+  const a = S.exp.analysis
+  d.gene = a.targets[0] || ''
+  return Object.assign(d, S.exp.exp.plot || {})
+}
+function tabPlot() {
+  if (!S.exp.analysis.targets.length) return warnBox(S.exp.analysis.warnings) + '<div class="card empty"><h3>还没有可作图的结果</h3><p>请先在「编辑设置与分组」中选择内参与归一组。</p></div>'
+  if (!S.plot) S.plot = plotDefaults()
+  return `<div class="plot-layout"><div class="card ctrl" id="ctrl"></div>
+    <div class="preview"><div class="paper-wrap"><div class="paper" id="paper"><div class="perr muted">正在绘制…</div></div></div>
+      <div class="pinfo"><span id="pinfo"></span><span>预览随参数实时更新</span></div>
+      <div class="export">
+        <button class="btn" onclick="exportSVG()">下载 SVG（矢量）</button>
+        <button class="btn" onclick="exportPNG(300)">PNG 300 dpi</button>
+        <button class="btn" onclick="exportPNG(600)">PNG 600 dpi</button>
+        <button class="btn primary" onclick="saveToProject()">保存到项目「图」文件夹</button>
+        <button class="btn ghost" onclick="rememberPlot()">记住为本实验默认</button>
+      </div></div></div>`
+}
+function seg(key, opts) {
+  return `<div class="seg">${opts.map(([v, l]) => `<button class="${S.plot[key]===v?'on':''}" onclick="setP('${key}',${JSON.stringify(v).replace(/"/g,'&quot;')})">${l}</button>`).join('')}</div>`
+}
+function swatch(cols) { return `<div class="sw">${cols.slice(0, 8).map(c => `<i style="background:${c}"></i>`).join('')}</div>` }
+function renderCtrl() {
+  const P = S.plot, a = S.exp.analysis, M = S.meta
+  const single = ['bar','box','dot','line'].includes(P.template)
+  const multi = ['grouped','heatmap'].includes(P.template)
+  const groupsAll = orderedGroups()
+  const palCols = (M.palettes.find(p => p.key === P.palette) || M.palettes[0]).colors
+  let k = 0
+  const autoColor = g => { if (P.ctrl_gray && g === a.ctrl) return '#A6A6A6'; return palCols[(k++) % palCols.length] }
+  const colorRows = groupsAll.map(g => { const ac = autoColor(g); return {g, c:P.colors[g] || ac, custom:!!P.colors[g]} })
+  const on = g => !P.groups.length || P.groups.includes(g)
+  let h = `<div class="sec"><h4>模板</h4><div class="tpls">${M.templates.map(t => `<div class="tpl ${P.template===t.key?'on':''}" onclick="setP('template','${t.key}')"><svg viewBox="0 0 44 30" fill="currentColor" stroke="currentColor" stroke-width="1">${TPL_ICON[t.key]}</svg>${t.label}</div>`).join('')}</div></div>`
+  h += `<div class="sec"><h4>风格预设</h4><div class="presets">${M.presets.map(p => `<div class="preset ${P.preset===p.key?'on':''}" onclick="applyPreset('${p.key}')">${swatch(M.palettes.find(x=>x.key===p.palette).colors)}<span>${p.label}</span></div>`).join('')}</div></div>`
+  h += `<div class="sec"><h4>数据</h4>`
+  if (single) h += `<div class="row"><label>基因</label><select onchange="setP('gene',this.value)">${a.targets.map(t => `<option ${P.gene===t?'selected':''}>${esc(t)}</option>`).join('')}</select></div>`
+  if (multi) h += `<div class="row" style="align-items:flex-start"><label>基因</label><div class="chips">${a.targets.map(t => `<span class="chip ${!P.genes.length||P.genes.includes(t)?'on':''}" onclick="toggleList('genes','${esc(t)}')"><i>${esc(t)}</i></span>`).join('')}</div></div>`
+  if (P.template !== 'heatmap') h += `<div class="row"><label>Y 轴</label>${seg('y', [['rq','相对表达 RQ'],['log2','log2FC']])}</div>`
+  if (P.template !== 'heatmap' && P.template !== 'box') h += `<div class="row"><label>误差</label>${seg('err', [['sem','SEM'],['sd','SD']])}</div>`
+  h += `<div class="row"><label>显著性</label>${seg('annot', [['auto','自动'],['letter','字母'],['star','星号'],['none','无']])}</div>`
+  h += `</div><div class="sec"><h4>分组、顺序与颜色</h4><div class="gcolors">${colorRows.map((r, i) => `<div class="gc"><input type="checkbox" ${on(r.g)?'checked':''} onchange="toggleList('groups','${esc(r.g)}')"><input type="color" value="${r.c}" onchange="setColor('${esc(r.g)}',this.value)" title="点击改颜色"><span>${esc(r.g)}${r.g===a.ctrl?' <span class="muted">对照</span>':''}</span>${r.custom?`<button class="mv" title="恢复配色" onclick="setColor('${esc(r.g)}','')">↺</button>`:''}<button class="mv" onclick="moveGroup(${i},-1)" title="上移">▲</button><button class="mv" onclick="moveGroup(${i},1)" title="下移">▼</button></div>`).join('')}</div>
+    <div class="row" style="margin-top:10px"><label>对照灰色</label><div class="seg" style="flex:none;width:110px"><button class="${P.ctrl_gray?'on':''}" onclick="setP('ctrl_gray',true)">是</button><button class="${!P.ctrl_gray?'on':''}" onclick="setP('ctrl_gray',false)">否</button></div></div></div>`
+  if (P.template === 'heatmap') h += `<div class="sec"><h4>热图色带</h4>${M.heatmaps.map(p => `<div class="pal ${P.heat===p.key?'on':''}" onclick="setP('heat','${p.key}')"><div class="sw" style="width:150px"><i style="background:linear-gradient(90deg,${p.colors.join(',')})"></i></div><span>${p.label}</span></div>`).join('')}
+    <div class="row"><label>格内数值</label>${seg('heat_values', [[true,'显示'],[false,'隐藏']])}</div></div>`
+  else h += `<div class="sec"><h4>配色方案</h4>${M.palettes.map(p => `<div class="pal ${P.palette===p.key?'on':''}" onclick="setPalette('${p.key}')">${swatch(p.colors)}<span>${p.label}</span></div>`).join('')}
+    ${P.template!=='line'?`<div class="row" style="margin-top:8px"><label>填充</label>${seg('fill', [['solid','实心'],['light','浅色'],['outline','描边']])}</div>`:''}
+    <div class="row"><label>个体点</label>${seg('point', [['dark','深色'],['color','同色'],['open','空心'],['none','不显示']])}</div></div>`
+  h += `<div class="sec"><h4>尺寸与字体</h4>
+    <div class="row"><label>预设</label>${['89','120','183'].map((w, i) => `<button class="btn sm ${String(P.width_mm)===w?'primary':''}" onclick="setSize(${w})">${['单栏 89','1.5 栏 120','双栏 183'][i]}</button>`).join('')}</div>
+    <div class="row"><label>宽 mm</label><input type="number" min="30" max="300" value="${P.width_mm}" onchange="setP('width_mm',+this.value)"><label style="width:auto">高 mm</label><input type="number" min="25" max="300" value="${P.height_mm}" onchange="setP('height_mm',+this.value)"></div>
+    <div class="row"><label>字号 pt</label><input type="number" min="4" max="16" step="0.5" value="${P.font_pt}" onchange="setP('font_pt',+this.value)"><select onchange="setP('font',this.value)">${M.fonts.map(f => `<option value="${f.key}" ${P.font===f.key?'selected':''}>${f.label}</option>`).join('')}</select></div></div>`
+  h += `<div class="sec"><h4>文字</h4>
+    <div class="row"><label>标题</label><input type="text" value="${esc(P.title)}" placeholder="${single?'默认用基因名':'默认无'}" onchange="setP('title',this.value)"></div>
+    <div class="row"><label>Y 轴名</label><input type="text" value="${esc(P.ylabel)}" placeholder="默认自动" onchange="setP('ylabel',this.value)"></div>
+    <div class="row"><label>X 轴名</label><input type="text" value="${esc(P.xlabel)}" placeholder="默认无" onchange="setP('xlabel',this.value)"></div>
+    <div class="row"><label>基因斜体</label>${seg('italic', [[true,'斜体'],[false,'正体']])}</div>
+    <div class="row"><label>图角署名</label>${seg('signature', [[false,'不加'],[true,'加']])}</div>
+    <div class="muted" style="font-size:11.5px;margin-top:6px">上标写 ^{…}，下标写 _{…}，例如 log_{2} 或 2^{−ΔΔCt}</div></div>`
+  if (P.template === 'line') h += `<div class="sec"><h4>时间序列说明</h4><div class="muted" style="font-size:12.5px">在「编辑设置与分组」里给每个分组填「时间点」与「系列」。只有一个系列时标字母法，多个系列时逐时间点比较各系列并标星号。</div></div>`
+  $('#ctrl').innerHTML = h
+}
+function orderedGroups() {
+  const a = S.exp.analysis
+  const base = a.groups_order.slice()
+  const ord = S.plot.order || []
+  return base.sort((x, y) => { const i = ord.indexOf(x), j = ord.indexOf(y); return (i < 0 ? 999 + base.indexOf(x) : i) - (j < 0 ? 999 + base.indexOf(y) : j) })
+}
+function setP(k, v) { S.plot[k] = v; if (k !== 'preset' && ['palette','fill','point','err','ctrl_gray','heat'].includes(k)) S.plot.preset = ''; renderCtrl(); refreshPlot() }
+function setPalette(k) { S.plot.colors = {}; setP('palette', k) }
+function setColor(g, c) { if (c) S.plot.colors[g] = c; else delete S.plot.colors[g]; renderCtrl(); refreshPlot() }
+function setSize(w) { S.plot.width_mm = w; S.plot.height_mm = Math.round(w * (S.plot.template === 'heatmap' ? 0.55 : 0.78)); renderCtrl(); refreshPlot() }
+function applyPreset(key) {
+  const p = S.meta.presets.find(x => x.key === key)
+  Object.assign(S.plot, {preset:key, palette:p.palette, fill:p.fill, point:p.point, err:p.err, ctrl_gray:p.ctrl_gray, heat:p.heat, colors:{}})
+  renderCtrl(); refreshPlot()
+}
+function toggleList(key, v) {
+  const all = key === 'genes' ? S.exp.analysis.targets : orderedGroups()
+  let cur = S.plot[key].length ? S.plot[key].slice() : all.slice()
+  cur = cur.includes(v) ? cur.filter(x => x !== v) : all.filter(x => cur.includes(x) || x === v)
+  if (!cur.length) return toast('至少保留一项')
+  S.plot[key] = cur.length === all.length ? [] : cur
+  renderCtrl(); refreshPlot()
+}
+function moveGroup(i, d) {
+  const o = orderedGroups(), j = i + d
+  if (j < 0 || j >= o.length) return
+  ;[o[i], o[j]] = [o[j], o[i]]
+  S.plot.order = o
+  if (S.plot.groups.length) S.plot.groups = o.filter(g => S.plot.groups.includes(g))
+  renderCtrl(); refreshPlot()
+}
+let plotTimer = null, plotSeq = 0
+function refreshPlot() {
+  clearTimeout(plotTimer)
+  plotTimer = setTimeout(async () => {
+    const seq = ++plotSeq
+    const opts = {...S.plot, groups: S.plot.groups.length ? S.plot.groups : orderedGroups()}
+    try {
+      const r = await api('/api/plot', {project:S.proj, id:S.eid, opts})
+      if (seq !== plotSeq) return
+      S.svg = r.svg
+      $('#paper').innerHTML = r.svg
+      const w = S.plot.width_mm, h = S.plot.height_mm
+      $('#paper').style.width = Math.min(860, w * 6.8) + 'px'
+      $('#pinfo').textContent = `${w} × ${h} mm · ${S.plot.font_pt} pt`
+    } catch (e) { if (seq === plotSeq) { S.svg = ''; $('#paper').innerHTML = `<div class="perr">${esc(e.message)}</div>` } }
+  }, 120)
+}
+function figName(ext) {
+  const P = S.plot, a = S.exp.analysis
+  const what = ['grouped','heatmap'].includes(P.template) ? 'multi' : (P.gene || a.targets[0])
+  return `${S.eid}_${what}_${P.template}.${ext}`.replace(/[\\/:*?"<>|]/g, '_')
+}
+function download(blob, name) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000)
+}
+function exportSVG() { if (!S.svg) return toast('图还没画好', true); download(new Blob([S.svg], {type:'image/svg+xml'}), figName('svg')) }
+function svgToPng(dpi) {
+  return new Promise((ok, bad) => {
+    const img = new Image()
+    const W = Math.round(S.plot.width_mm / 25.4 * dpi), H = Math.round(S.plot.height_mm / 25.4 * dpi)
+    const svg = S.svg.replace(/width="[^"]+mm" height="[^"]+mm"/, `width="${W}" height="${H}"`)
+    img.onload = () => { const c = document.createElement('canvas'); c.width = W; c.height = H
+      const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); g.drawImage(img, 0, 0, W, H)
+      c.toBlob(b => b ? ok(b) : bad(new Error('PNG 生成失败')), 'image/png') }
+    img.onerror = () => bad(new Error('PNG 生成失败'))
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)
+  })
+}
+const exportPNG = guard(async dpi => { if (!S.svg) return toast('图还没画好', true); download(await svgToPng(dpi), figName('png').replace('.png', `_${dpi}dpi.png`)) })
+const blobB64 = b => new Promise(ok => { const r = new FileReader(); r.onload = () => ok(r.result.split(',')[1]); r.readAsDataURL(b) })
+const saveToProject = guard(async () => {
+  if (!S.svg) return toast('图还没画好', true)
+  await api('/api/figure/save', {project:S.proj, filename:figName('svg'), svg:S.svg})
+  const r = await api('/api/figure/save', {project:S.proj, filename:figName('png').replace('.png', '_600dpi.png'), png:await blobB64(await svgToPng(600))})
+  await rememberPlot(true)
+  toast('已保存 SVG 与 600 dpi PNG 到：' + r.path.replace(/[^\\/]+$/, ''))
+})
+const rememberPlot = guard(async quiet => {
+  await api('/api/plot', {project:S.proj, id:S.eid, opts:S.plot, remember:true})
+  S.exp.exp.plot = JSON.parse(JSON.stringify(S.plot))
+  if (quiet !== true) toast('已记住作图设置，下次打开本实验自动套用')
+})
+
+// ------------------------------------------------------------ 导入 / 编辑
+function newExp() {
+  S.ed = {isNew:true, files:[], parsed:[], wells:[], rename:{}, samples:{}, gsets:{},
+          exp:{name:'', category:S.catFilter||'', date:new Date().toISOString().slice(0,10), notes:'', ref:'', ctrl:'', thr:0.5, metric:'sd', drop:true, statval:'dcts', plot:{}},
+          sel:new Set(), preview:null}
+  go('edit')
+}
+function editExp() {
+  const {exp, wells, samples, gsets} = S.exp
+  S.ed = {isNew:false, files:[], parsed:[], wells:JSON.parse(JSON.stringify(wells)), rename:{},
+          samples:{...samples}, gsets:Object.fromEntries(gsets.map(g => [g.group, {...g}])),
+          exp:JSON.parse(JSON.stringify(exp)), sel:new Set(), preview:null}
+  go('edit')
+}
+const edTargets = () => [...new Set(S.ed.wells.map(w => w.target).filter(Boolean))].sort(natcmp)
+const edGroups = () => [...new Set(Object.values(S.ed.samples))].sort(natcmp)
+function viewEdit() {
+  const E = S.ed, e = E.exp, p = curProject()
+  const cats = p ? p.categories : []
+  return `<div class="page">
+    <div class="crumb"><a onclick="go('home')">数据中心</a> / <a onclick="go('project')">${esc(S.proj)}</a> / ${E.isNew ? '导入新实验' : e.id + ' 编辑'}</div>
+    <div class="titlebar"><h2>${E.isNew ? '导入新实验' : '编辑实验 · ' + esc(e.name)}</h2></div>
+    <div class="card"><div class="card-h"><h3>① 数据文件</h3><span class="muted" style="font-size:12px">${E.wells.length ? E.wells.length + ' 孔已载入' : ''}</span></div><div class="card-b">
+      <div class="drop" id="drop" onclick="$('#file').click()">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 16V4m0 0l-4 4m4-4l4 4M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <h3>${E.isNew ? '拖入 CFX 导出文件，或点击选择' : '追加更多板的文件（可选）'}</h3>
+        <div class="muted" style="font-size:12.5px">Quantification Summary / Cq Results，xlsx 或 csv，可多选。分几块板跑的一起拖进来，按「样本 × 基因」自动合并。</div>
+      </div>
+      <input type="file" id="file" multiple accept=".xlsx,.csv" style="display:none" onchange="addFiles([...this.files]);this.value=''">
+      <div class="flist" id="flist" style="margin-top:12px"></div>
+    </div></div>
+    <div id="edrest"></div>
+  </div>`
+}
+function afterEdit() {
+  const d = $('#drop')
+  d.ondragover = ev => { ev.preventDefault(); d.classList.add('over') }
+  d.ondragleave = () => d.classList.remove('over')
+  d.ondrop = ev => { ev.preventDefault(); d.classList.remove('over'); addFiles([...ev.dataTransfer.files]) }
+  renderFiles(); renderEdRest()
+}
+const addFiles = guard(async fl => {
+  const files = []
+  for (const f of fl) files.push({name:f.name, data:await blobB64(f)})
+  if (!files.length) return
+  toast('正在解析 ' + files.length + ' 个文件…')
+  const r = await api('/api/parse', {files})
+  const E = S.ed
+  const okNames = new Set(r.files.filter(f => f.n).map(f => f.name))
+  E.files.push(...files.filter(f => okNames.has(f.name)))
+  E.parsed.push(...r.files)
+  E.wells.push(...r.wells)
+  for (const [s, g] of Object.entries(r.suggest.samples)) if (!(s in E.samples)) E.samples[s] = g
+  if (!E.exp.ref) E.exp.ref = r.suggest.ref
+  if (!E.exp.ctrl) E.exp.ctrl = r.suggest.ctrl
+  if (!E.exp.name && files.length) E.exp.name = guessName(files.map(f => f.name))
+  const bad = r.files.filter(f => !f.n)
+  if (bad.length) toast(`${bad.length} 个文件未能读取：${bad.map(b => b.name + '（' + b.error + '）').join('，')}`, true)
+  renderFiles(); renderEdRest()
+})
+function guessName(names) {
+  const n = names[0].replace(/\.(xlsx|csv)$/i, '').replace(/\s*-\s*(Quantification.*|Cq Results.*)$/i, '').replace(/^admin_\d{4}-\d{2}-\d{2} [\d-]+_CT\d+(\.pcrd)?\s*/i, '').trim()
+  return n || ''
+}
+function renderFiles() {
+  const E = S.ed
+  // 每个文件下的基因名可改名（CFX 未填 Target 时常是数字）
+  $('#flist').innerHTML = E.parsed.map((f, fi) => `<div class="fi ${f.n?'':'err'}"><span class="fn" title="${esc(f.name)}">${esc(f.name)}</span>
+    ${f.n ? `<span class="muted num" style="font-size:12px">${f.n} 孔 · ${f.samples} 样本</span>${f.targets.map(t => { const cur = E.rename[f.name + '\u0001' + t] ?? t; const warn = /^\d*$/.test(cur)
+      return `<span class="ren ${warn?'warn':''}" title="${warn?'基因名是数字或为空，可能 CFX 未填 Target，请改成真实基因名':'可改名'}">基因 <input value="${esc(cur)}" onchange="renameTarget(${fi},'${esc(t)}',this.value)"></span>` }).join('')}` : `<span style="color:var(--bad);font-size:12px">${esc(f.error)}</span>`}
+    </div>`).join('')
+}
+function renameTarget(fi, orig, nv) {
+  const E = S.ed, f = E.parsed[fi], key = f.name + '\u0001' + orig
+  const prev = E.rename[key] ?? orig
+  nv = nv.trim() || orig
+  E.rename[key] = nv
+  E.wells.forEach(w => { if (w.file === f.name && w.target === prev) w.target = nv })
+  if (E.exp.ref === prev) E.exp.ref = nv
+  renderFiles(); renderEdRest()
+}
+function renderEdRest() {
+  const E = S.ed, e = E.exp
+  if (!E.wells.length) { $('#edrest').innerHTML = ''; return }
+  const T = edTargets(), G = edGroups(), p = curProject()
+  const samples = Object.keys(E.samples).sort(natcmp)
+  $('#edrest').innerHTML = `
+  <div class="card" style="margin-top:16px"><div class="card-h"><h3>② 实验信息与参数</h3></div><div class="card-b"><div class="form">
+    <label class="f w2">实验名称<input value="${esc(e.name)}" oninput="S.ed.exp.name=this.value" placeholder="例如：siSTAT3 敲低效率 48 h"></label>
+    <label class="f">实验内容 / 分类<input list="cats" value="${esc(e.category)}" oninput="S.ed.exp.category=this.value" placeholder="敲低、组织表达、时序…"><datalist id="cats">${(p?p.categories:[]).map(c => `<option>${esc(c)}</option>`).join('')}</datalist></label>
+    <label class="f">日期<input type="date" value="${esc(e.date)}" onchange="S.ed.exp.date=this.value"></label>
+    <label class="f">内参基因<select onchange="S.ed.exp.ref=this.value;edPreview()"><option value="">请选择</option>${T.map(t => `<option ${e.ref===t?'selected':''}>${esc(t)}</option>`).join('')}</select></label>
+    <label class="f">归一组（对照）<select onchange="S.ed.exp.ctrl=this.value;edPreview()"><option value="">请选择</option>${G.map(g => `<option ${e.ctrl===g?'selected':''}>${esc(g)}</option>`).join('')}</select></label>
+    <label class="f">复孔离散阈值<input type="number" step="0.1" min="0.05" value="${e.thr}" onchange="S.ed.exp.thr=+this.value;edPreview()"><span class="hint">CFX 默认 SD 0.5</span></label>
+    <label class="f">离散指标<select onchange="S.ed.exp.metric=this.value;edPreview()"><option value="sd" ${e.metric!=='range'?'selected':''}>标准差 SD</option><option value="range" ${e.metric==='range'?'selected':''}>极差 max−min</option></select></label>
+    <label class="f">离群孔<select onchange="S.ed.exp.drop=this.value==='1';edPreview()"><option value="1" ${e.drop?'selected':''}>三选二自动剔除</option><option value="0" ${!e.drop?'selected':''}>不剔除</option></select></label>
+    <label class="f">统计所用值<select onchange="S.ed.exp.statval=this.value;edPreview()"><option value="dcts" ${e.statval!=='rqs'?'selected':''}>ΔCt（推荐）</option><option value="rqs" ${e.statval==='rqs'?'selected':''}>RQ</option></select></label>
+    <label class="f w2">备注<input value="${esc(e.notes)}" oninput="S.ed.exp.notes=this.value" placeholder="处理条件、批次、引物等"></label>
+  </div></div></div>
+  <div class="ed-grid">
+    <div class="card"><div class="card-h"><h3>③ 样本分组</h3><span class="muted" style="font-size:12px">${samples.length} 样本 · ${G.length} 组</span></div>
+      <div class="scroll" style="max-height:440px"><table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" onchange="selAll(this.checked)"></th><th>样本</th><th>分组（同名即生物学重复）</th></tr></thead><tbody>
+      ${samples.map(s => `<tr><td><input type="checkbox" ${E.sel.has(s)?'checked':''} onchange="selOne('${esc(s)}',this.checked)"></td><td>${esc(s)}</td><td><input list="glist" value="${esc(E.samples[s])}" onchange="setGroup('${esc(s)}',this.value)"></td></tr>`).join('')}
+      </tbody></table><datalist id="glist">${G.map(g => `<option>${esc(g)}</option>`).join('')}</datalist></div>
+      <div class="batch">选中 <b>${E.sel.size}</b> 个样本，设为分组 <input id="bg" list="glist" placeholder="组名"><button class="btn sm" onclick="batchGroup()">应用</button></div></div>
+    <div class="card"><div class="card-h"><h3>④ 分组设置</h3><span class="muted" style="font-size:12px">顺序决定出图次序，时间序列模板会用到时间点与系列</span></div>
+      <div class="scroll" style="max-height:440px"><table class="tbl"><thead><tr><th>分组</th><th style="width:70px">顺序</th><th>时间点</th><th>系列</th></tr></thead><tbody>
+      ${G.map(g => { const s = E.gsets[g] || {}; return `<tr><td>${esc(g)}${g===e.ctrl?' <span class="tag gray">对照</span>':''}</td><td><input type="number" value="${esc(s.order ?? '')}" onchange="setGs('${esc(g)}','order',this.value)"></td><td><input value="${esc(s.x||'')}" placeholder="如 0、24、48 h" onchange="setGs('${esc(g)}','x',this.value)"></td><td><input value="${esc(s.series||'')}" placeholder="如 dsEGFP" onchange="setGs('${esc(g)}','series',this.value)"></td></tr>` }).join('')}
+      </tbody></table></div></div>
+  </div>
+  <div id="edprev" style="margin-top:16px"></div>
+  <div class="savebar"><div class="info" id="edinfo">${E.wells.length} 孔 · ${T.length} 个基因 · ${G.length} 组</div>
+    <button class="btn" onclick="${E.isNew ? "go('project')" : `openExp(S.proj,'${e.id}')`}">取消</button>
+    <button class="btn primary" id="savebtn" onclick="saveEdit()">保存到项目 Excel</button></div>`
+  edPreview()
+}
+function selAll(on) { Object.keys(S.ed.samples).forEach(s => on ? S.ed.sel.add(s) : S.ed.sel.delete(s)); renderEdRest() }
+function selOne(s, on) { on ? S.ed.sel.add(s) : S.ed.sel.delete(s); $('.batch b').textContent = S.ed.sel.size }
+function setGroup(s, g) { S.ed.samples[s] = g.trim() || s; renderEdRest() }
+function batchGroup() {
+  const g = $('#bg').value.trim()
+  if (!g) return toast('请先填组名', true)
+  if (!S.ed.sel.size) return toast('请先勾选样本', true)
+  S.ed.sel.forEach(s => S.ed.samples[s] = g); S.ed.sel.clear(); renderEdRest()
+}
+function setGs(g, k, v) { (S.ed.gsets[g] ||= {group:g})[k] = v.trim(); edPreview() }
+function edPayload() {
+  const E = S.ed
+  const G = new Set(Object.values(E.samples))
+  const gsets = Object.values(E.gsets).filter(s => G.has(s.group) && (s.order !== undefined && s.order !== '' || s.x || s.series || s.color))
+  return {exp:E.exp, wells:E.wells, samples:E.samples, gsets}
+}
+let edTimer = null
+function edPreview() {
+  clearTimeout(edTimer)
+  edTimer = setTimeout(guard(async () => {
+    const a = await api('/api/analyze', edPayload())
+    const box = $('#edprev'); if (!box) return
+    const s = a.qc_summary
+    box.innerHTML = warnBox(a.warnings) + (a.targets.length ? `<div class="card"><div class="card-h"><h3>结果预览</h3><span class="muted" style="font-size:12px">复孔 QC：合格 ${s.pass}，剔除修正 ${s.fixed}，超阈 ${s.fail}</span></div><div class="card-b" style="display:flex;gap:28px;flex-wrap:wrap">
+      ${a.targets.map(t => `<div><div class="gene-h" style="font-weight:600;margin-bottom:4px">${esc(t)}</div>${a.groups_order.filter(g => a.genes[t].groups[g]).map(g => `<div class="num" style="font-size:12.5px">${esc(g)}：${fmt(a.genes[t].groups[g].mean, 3)} <span class="sig">${g===a.ctrl?'':esc(a.genes[t].stats.stars_vs_control[g]||'')}</span></div>`).join('')}</div>`).join('')}
+    </div></div>` : '')
+  }), 250)
+}
+const saveEdit = guard(async () => {
+  const E = S.ed
+  if (!E.exp.name.trim()) return toast('请填写实验名称', true)
+  const btn = $('#savebtn'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 保存中'
+  try {
+    const r = await api('/api/experiment/save', {project:S.proj, ...edPayload(), files:E.files})
+    await loadProjects()
+    toast('已保存并写入项目 Excel')
+    await openExp(S.proj, r.id, 'res')
+  } finally { if (btn.isConnected) { btn.disabled = false; btn.textContent = '保存到项目 Excel' } }
+})
+
+// ------------------------------------------------------------ 弹窗
+function dialog(title, body, okText, onOk, danger) {
+  const m = document.createElement('div'); m.className = 'mask'
+  m.innerHTML = `<div class="dlg"><div class="card-h"><h3>${title}</h3></div><div class="card-b">${body}</div><div class="foot"><button class="btn" data-x>取消</button><button class="btn primary" data-ok style="${danger?'background:var(--bad);border-color:var(--bad)':''}">${okText}</button></div></div>`
+  document.body.appendChild(m)
+  const close = () => m.remove()
+  m.querySelector('[data-x]').onclick = close
+  m.onclick = ev => { if (ev.target === m) close() }
+  m.querySelector('[data-ok]').onclick = guard(async () => { if (await onOk(m) !== false) close() })
+  const inp = m.querySelector('input'); if (inp) { inp.focus(); inp.onkeydown = ev => { if (ev.key === 'Enter') m.querySelector('[data-ok]').click() } }
+}
+function dlgNewProject() {
+  dialog('新建项目', `<label class="f">项目名称<input id="pn" placeholder="例如：炎症通路 qPCR"></label><label class="f">描述（可选）<input id="pd" placeholder="课题、负责人等"></label><div class="muted" style="font-size:12px">会在数据库里建同名文件夹与 Excel 总表。</div>`, '创建', async m => {
+    const name = m.querySelector('#pn').value.trim()
+    if (!name) { toast('请填写项目名称', true); return false }
+    const r = await api('/api/project/create', {name, desc:m.querySelector('#pd').value.trim()})
+    await loadProjects(); S.proj = r.name; S.openProj.add(r.name); S.catFilter = ''; go('project')
+  })
+}
+function dlgDelete() {
+  const e = S.exp.exp
+  dialog('删除实验', `确定删除 <b>${esc(e.id)} ${esc(e.name)}</b> 吗？<div class="muted" style="font-size:12.5px">会从项目 Excel 中移除它的所有数据。删除前的版本保留在项目的「.备份」文件夹，原始 CFX 文件不会删除。</div>`, '删除', async () => {
+    await api('/api/experiment/delete', {project:S.proj, id:e.id})
+    await loadProjects(); toast('已删除'); go('project')
+  }, true)
+}
+function dlgSettings() {
+  dialog('设置', `<label class="f">数据库位置<input id="root" value="${esc(S.meta.root)}"><span class="hint">所有项目文件夹存放处。留空恢复默认（我的文档/qPCR数据库）。</span></label>
+    <div style="display:flex;gap:8px"><button class="btn sm" onclick="guard(()=>api('/api/open_folder',{}))()">打开数据库文件夹</button><button class="btn sm danger" onclick="quitApp()">退出程序</button></div>`, '保存', async m => {
+    const r = await api('/api/config', {root:m.querySelector('#root').value.trim()})
+    S.meta.root = r.root; await loadProjects(); go('home'); toast('数据库位置：' + r.root)
+  })
+}
+function quitApp() { api('/api/shutdown', {}).finally(() => { document.body.innerHTML = '<div class="empty" style="padding-top:20vh"><h3>qPCR 数据中心已退出</h3><p>可以关闭这个页面了。</p></div>' }) }
+
+// ------------------------------------------------------------ 启动
+;(async () => {
+  try {
+    S.meta = await api('/api/meta')
+    await loadProjects()
+    go('home')
+  } catch (e) { $('#main').innerHTML = `<div class="page"><div class="notes">无法连接本地服务：${esc(e.message)}</div></div>` }
+  setInterval(() => fetch('/api/ping').catch(() => {}), 20000)
+})()
+</script>
+</body>
+</html>

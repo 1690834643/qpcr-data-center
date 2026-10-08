@@ -1,0 +1,9 @@
+*.exe
+__pycache__/
+*.pyc
+build/
+dist/
+*.spec
+.分析缓存.json
+.备份/
+tests_local/
