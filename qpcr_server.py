@@ -25,7 +25,7 @@ import qpcr_plots as qp
 import qpcr_store as qs
 
 SIGNATURE = 'qpcr-data-center'
-VERSION = '2.2'
+VERSION = '2.3'
 PORT0 = 8765
 IDLE_EXIT = 15 * 60     # 从未连上网页时的兜底退出时间
 TAB_STALE = 150         # 标签页超过这么久没心跳视为已关（后台标签的计时器会被浏览器降到每分钟一次）

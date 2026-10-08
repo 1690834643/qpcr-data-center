@@ -356,7 +356,7 @@ function viewHome() {
       <div class="card stat"><div class="v num">${genes.size}</div><div class="k">检测基因</div></div>
     </div>
     ${recent.length ? `<h3 style="font-size:16px;margin:6px 0 12px">最近更新</h3><div class="grid">${recent.map(e => expCard(e, e.proj)).join('')}</div>` : ''}
-    <p class="muted" style="margin-top:28px;font-size:12px">数据库位置：${esc(S.meta.root)} · v${S.meta.version} · ${esc(S.meta.author)}</p>
+    <p class="muted" style="margin-top:28px;font-size:12px">数据库位置：${esc(S.meta.root)} · v${S.meta.version} · ${esc(S.meta.author)} · 关注作者：<a href="https://xhslink.cn/o/7cvSv9Sy6du" target="_blank" rel="noopener">小红书</a> · <a href="https://b23.tv/MmJWHWo" target="_blank" rel="noopener">B站</a></p>
   </div>`
 }
 function expCard(e, proj) {

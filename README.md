@@ -2,6 +2,8 @@
 
 **CFX96 荧光定量结果的本地数据中心**：按项目归档，自动完成技术重复质控、ΔΔCt 相对定量与差异检验，用期刊模板出图，所有数据存成 Excel。
 
+> 作者：自动挡赛车手 · 欢迎关注 [小红书](https://xhslink.cn/o/7cvSv9Sy6du) / [B站](https://b23.tv/MmJWHWo)
+
 A local-first data hub for Bio-Rad CFX96 qPCR exports. It organizes runs by project, performs replicate QC, ΔΔCt relative quantification, and statistical testing, and renders journal-style figures. Everything is stored in plain Excel workbooks. Pure Python standard library, zero third-party dependencies, shipped as a single Windows exe.
 
 ![作图界面](docs/screenshots/plot_bar.png)
