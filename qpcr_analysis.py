@@ -19,6 +19,7 @@ DEFAULT_PARAMS = {
     'metric': 'sd',      # sd 或 range
     'drop': True,        # 三选二剔除离群孔
     'statval': 'dcts',   # 统计所用值：dcts 或 rqs
+    'comp': 'tukey',     # ≥3 组的多重比较：tukey 全部两两，dunnett 各组 vs 对照
 }
 
 COMMON_REF = ['ef', 'ef1a', 'ef1', 'eef1a', 'gapdh', 'actin', 'bactin', 'actb',
@@ -67,16 +68,19 @@ def ordered_groups(group_names, ctrl, group_settings):
     return sorted(group_names, key=key)
 
 
+# 统计算法有改动时加一，让磁盘上的旧分析缓存失效
+STATS_VERSION = 2
+
 _MEMO = OrderedDict()
 _MEMO_MAX = 128
 
 
 def input_key(meta, wells, sample_group, group_settings=None):
     """分析输入的指纹：参数、孔、分组、分组设置不变则结果不变。"""
-    m = {k: meta.get(k) for k in ('ref', 'ctrl', 'thr', 'metric', 'drop', 'statval')}
+    m = {k: meta.get(k) for k in ('ref', 'ctrl', 'thr', 'metric', 'drop', 'statval', 'comp')}
     w = [(x.get('sample'), x.get('target'), x.get('cq'), bool(x.get('excluded')), x.get('well')) for x in wells]
     g = sorted((x.get('group'), str(x.get('order') or '')) for x in (group_settings or []))
-    raw = json.dumps([m, w, sorted(sample_group.items()), g], ensure_ascii=False, default=str)
+    raw = json.dumps([STATS_VERSION, m, w, sorted(sample_group.items()), g], ensure_ascii=False, default=str)
     return hashlib.sha1(raw.encode('utf-8')).hexdigest()
 
 
@@ -97,7 +101,7 @@ def analyze_cached(meta, wells, sample_group, group_settings=None, disk=None):
 
 
 def analyze(meta, wells, sample_group, group_settings=None):
-    """meta: 实验参数 dict（ref, ctrl, thr, metric, drop, statval）。
+    """meta: 实验参数 dict（ref, ctrl, thr, metric, drop, statval, comp）。
     wells: list[dict]，含 target/sample/cq/excluded。
     sample_group: dict{sample: group}。
     返回结果 dict（全部可 JSON 序列化）。"""
@@ -143,7 +147,7 @@ def analyze(meta, wells, sample_group, group_settings=None):
         'ref': ref, 'ctrl': ctrl, 'params': p,
         'targets_all': targets_all, 'targets': [], 'groups_order': [],
         'qc': qc, 'qc_summary': qc_sum, 'per_sample': [], 'genes': {},
-        'warnings': warnings,
+        'warnings': warnings, 'methods_text': '',
     }
 
     n_empty = sum(1 for w in wells if w.get('cq') is None)
@@ -184,7 +188,7 @@ def analyze(meta, wells, sample_group, group_settings=None):
         if not pg:
             continue
         all_groups.update(pg.keys())
-        st = q.run_stats(pg, value_key=p['statval'], control_group=ctrl)
+        st = q.run_stats(pg, value_key=p['statval'], control_group=ctrl, comp=p['comp'])
         p_vs = {}
         for g in pg:
             pc = next((c for c in st['pairwise'] if {c['group_i'], c['group_j']} == {g, ctrl}), None)
@@ -202,7 +206,8 @@ def analyze(meta, wells, sample_group, group_settings=None):
         result['genes'][target] = {
             'groups': gd,
             'stats': {
-                'method': st['method'], 'p': _num(st['p']), 'n_groups': st['n_groups'],
+                'method': st['method'], 'method_label': q.METHOD_NAMES.get(st['method'], '未检验'),
+                'p': _num(st['p']), 'n_groups': st['n_groups'],
                 'pairwise': [{**c, 'p': _num(c['p'])} for c in st['pairwise']],
                 'letters': st['letters'], 'stars_vs_control': st['stars_vs_control'],
                 'p_vs_control': p_vs, 'small_groups': small,
@@ -210,10 +215,27 @@ def analyze(meta, wells, sample_group, group_settings=None):
         }
         result['targets'].append(target)
     result['groups_order'] = ordered_groups(all_groups, ctrl, group_settings)
+    result['methods_text'] = methods_text(p, {t['stats']['method'] for t in result['genes'].values()})
     small_any = sorted({g for t in result['genes'].values() for g in t['stats']['small_groups']})
     if small_any:
         warnings.append(f'这些分组只有 1 个生物学重复，不参与显著性检验：{", ".join(small_any)}')
     return result
+
+
+def methods_text(params, methods):
+    """按本实验实际用到的检验生成一段统计方法说明，供结果页显示和图注引用。"""
+    val = 'RQ' if params['statval'] == 'rqs' else 'ΔCt'
+    parts = []
+    if 't-test' in methods:
+        parts.append('两组比较采用双侧 Student t 检验')
+    if 'anova' in methods:
+        parts.append('多组比较采用单因素 ANOVA，组间两两比较用 Tukey HSD 校正')
+    if 'dunnett' in methods:
+        parts.append('多组比较采用单因素 ANOVA，各组与对照组的比较用 Dunnett 检验校正')
+    if not parts:
+        return ''
+    return (f'以各生物学重复的 {val} 为检验值，' + '，'.join(parts) +
+            '。均为参数检验，假定各组方差相等。* p<0.05，** p<0.01，*** p<0.001。')
 
 
 def stats_for(values_by_group, statval_values=None, control=None):

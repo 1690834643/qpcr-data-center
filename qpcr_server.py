@@ -25,14 +25,16 @@ import qpcr_plots as qp
 import qpcr_store as qs
 
 SIGNATURE = 'qpcr-data-center'
-VERSION = '2.0'
+VERSION = '2.1'
 PORT0 = 8765
-IDLE_EXIT = 15 * 60
+IDLE_EXIT = 15 * 60     # 从未连上网页时的兜底退出时间
+TAB_STALE = 150         # 标签页超过这么久没心跳视为已关（后台标签的计时器会被浏览器降到每分钟一次）
+CLOSE_GRACE = 8         # 最后一个标签页关闭后等这么久再退出，留给刷新页面
 FROZEN = getattr(sys, 'frozen', False)
 BASE = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
 CONFIG = os.path.join(os.path.expanduser('~'), '.qpcr_data_center.json')
 
-state = {'last_ping': time.time()}
+state = {'last_ping': time.time(), 'tabs': {}, 'empty_since': None}
 
 
 def load_config():
@@ -181,7 +183,12 @@ def route(method, path, params, body):
     st = get_store
     if path == '/api/ping':
         state['last_ping'] = time.time()
+        if params.get('tab'):
+            state['tabs'][params['tab']] = time.time()
         return {'ok': True, 'app': SIGNATURE}
+    if path == '/api/bye':
+        state['tabs'].pop(params.get('tab'), None)
+        return {'ok': True}
     if path == '/api/meta':
         return {**qp.meta(), 'root': st().root, 'version': VERSION, 'author': qs.AUTHOR}
     if path == '/api/projects':
@@ -282,9 +289,24 @@ def _existing_instance(port):
 
 
 def _idle_watch():
+    """网页全部关闭后自动退出。从没有网页连上时按 IDLE_EXIT 兜底。"""
+    seen_tab = False
     while True:
-        time.sleep(30)
-        if time.time() - state['last_ping'] > IDLE_EXIT:
+        time.sleep(2)
+        now = time.time()
+        tabs = state['tabs']
+        for k, t in list(tabs.items()):
+            if now - t > TAB_STALE:
+                tabs.pop(k, None)
+        if tabs:
+            seen_tab = True
+            state['empty_since'] = None
+        elif seen_tab:
+            if state['empty_since'] is None:
+                state['empty_since'] = now
+            elif now - state['empty_since'] >= CLOSE_GRACE:
+                os._exit(0)
+        if now - state['last_ping'] > IDLE_EXIT:
             os._exit(0)
 
 

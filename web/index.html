@@ -227,6 +227,7 @@ h1,h2,h3{font-family:var(--serif);font-weight:600;margin:0;letter-spacing:.02em}
 .toast{position:fixed;right:22px;bottom:22px;z-index:60;display:grid;gap:8px}
 .toast div{background:#2A2521;color:#F4EADD;padding:10px 16px;border-radius:9px;box-shadow:0 8px 30px rgba(0,0,0,.2);font-size:13px;max-width:420px;animation:up .2s}
 .toast div.err{background:#8E3A32}
+.watermark{position:fixed;right:18px;bottom:12px;z-index:40;pointer-events:none;user-select:none;font-family:var(--serif);font-size:13px;letter-spacing:.18em;color:var(--ink);opacity:.22}
 @keyframes fade{from{opacity:0}}
 @keyframes up{from{opacity:0;transform:translateY(8px)}}
 .spin{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:rot .7s linear infinite}
@@ -251,6 +252,7 @@ h1,h2,h3{font-family:var(--serif);font-weight:600;margin:0;letter-spacing:.02em}
   <main class="main" id="main"></main>
 </div>
 <div class="toast" id="toast"></div>
+<div class="watermark">自动挡赛车手</div>
 
 <script>
 'use strict'
@@ -406,14 +408,13 @@ function warnBox(ws) {
   if (!ws || !ws.length) return '<div class="notes ok">数据完整，未发现需要注意的问题。</div>'
   return `<div class="notes"><strong>请注意</strong><ul>${ws.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>`
 }
-const METHOD = {'t-test':'Welch t 检验', 'anova':'单因素 ANOVA + Tukey HSD'}
 function tabRes(a) {
   if (!a.targets.length) return warnBox(a.warnings) + '<div class="card empty"><h3>还没有结果</h3><p>请在「编辑设置与分组」里选择内参基因与归一组。</p></div>'
-  let h = warnBox(a.warnings) + '<div class="res-grid">'
+  let h = warnBox(a.warnings) + (a.methods_text ? `<div class="notes ok"><strong>统计方法</strong> ${esc(a.methods_text)}</div>` : '') + '<div class="res-grid">'
   for (const t of a.targets) {
     const g = a.genes[t], st = g.stats
     const mx = Math.max(...a.groups_order.map(k => g.groups[k]?.mean || 0), 1e-9)
-    h += `<div class="card"><div class="card-h"><h3 class="gene-h">${esc(t)}</h3><span class="muted" style="font-size:12px">${METHOD[st.method] || '未检验'}${st.p!==null&&st.method?' · 总体 p = ' + fmtp(st.p):''}</span></div>
+    h += `<div class="card"><div class="card-h"><h3 class="gene-h">${esc(t)}</h3><span class="muted" style="font-size:12px">${esc(st.method_label || '未检验')}${st.p!==null&&st.method?' · 总体 p = ' + fmtp(st.p):''}</span></div>
       <table class="tbl"><thead><tr><th>分组</th><th class="r">n</th><th class="r">RQ 均值</th><th class="r">SEM</th><th></th><th class="r">log2FC</th><th class="r">p vs 对照</th><th>标注</th></tr></thead><tbody>
       ${a.groups_order.filter(k => g.groups[k]).map(k => { const d = g.groups[k]; const isC = k === a.ctrl
         return `<tr><td>${esc(k)}${isC?' <span class="tag gray">对照</span>':''}</td><td class="r">${d.n}</td><td class="r">${fmt(d.mean)}</td><td class="r">${fmt(d.sem)}</td>
@@ -533,7 +534,8 @@ function renderCtrl() {
     <div class="row"><label>基因斜体</label>${seg('italic', [[true,'斜体'],[false,'正体']])}</div>
     <div class="row"><label>图角署名</label>${seg('signature', [[false,'不加'],[true,'加']])}</div>
     <div class="muted" style="font-size:11.5px;margin-top:6px">上标写 ^{…}，下标写 _{…}，例如 log_{2} 或 2^{−ΔΔCt}</div></div>`
-  if (P.template === 'line') h += `<div class="sec"><h4>时间序列说明</h4><div class="muted" style="font-size:12.5px">在「编辑设置与分组」里给每个分组填「时间点」与「系列」。只有一个系列时标字母法，多个系列时逐时间点比较各系列并标星号。</div></div>`
+  if (P.template === 'line') h += `<div class="sec"><h4>时间序列说明</h4><div class="muted" style="font-size:12.5px">在「编辑设置与分组」里给每个分组填「时间点」与「系列」。只有一个系列时标字母法（Dunnett 时标星号）。多个系列时逐时间点比较各系列并标星号，各时间点的 p 值经 Holm 法校正。</div></div>`
+  if (a.methods_text) h += `<div class="sec"><h4>图注统计方法</h4><div class="muted" style="font-size:12.5px;user-select:text">${esc(a.methods_text)}${P.template === 'line' ? ' 时间序列多系列时，逐时间点比较各系列，p 值经 Holm 法校正。' : ''}</div></div>`
   $('#ctrl').innerHTML = h
 }
 function orderedGroups() {
@@ -624,7 +626,7 @@ const rememberPlot = guard(async quiet => {
 // ------------------------------------------------------------ 导入 / 编辑
 function newExp() {
   S.ed = {isNew:true, files:[], parsed:[], wells:[], rename:{}, samples:{}, gsets:{},
-          exp:{name:'', category:S.catFilter||'', date:new Date().toISOString().slice(0,10), notes:'', ref:'', ctrl:'', thr:0.5, metric:'sd', drop:true, statval:'dcts', plot:{}},
+          exp:{name:'', category:S.catFilter||'', date:new Date().toISOString().slice(0,10), notes:'', ref:'', ctrl:'', thr:0.5, metric:'sd', drop:true, statval:'dcts', comp:'tukey', plot:{}},
           sel:new Set(), preview:null}
   go('edit')
 }
@@ -718,6 +720,7 @@ function renderEdRest() {
     <label class="f">离散指标<select onchange="S.ed.exp.metric=this.value;edPreview()"><option value="sd" ${e.metric!=='range'?'selected':''}>标准差 SD</option><option value="range" ${e.metric==='range'?'selected':''}>极差 max−min</option></select></label>
     <label class="f">离群孔<select onchange="S.ed.exp.drop=this.value==='1';edPreview()"><option value="1" ${e.drop?'selected':''}>三选二自动剔除</option><option value="0" ${!e.drop?'selected':''}>不剔除</option></select></label>
     <label class="f">统计所用值<select onchange="S.ed.exp.statval=this.value;edPreview()"><option value="dcts" ${e.statval!=='rqs'?'selected':''}>ΔCt（推荐）</option><option value="rqs" ${e.statval==='rqs'?'selected':''}>RQ</option></select></label>
+    <label class="f">多组比较方式<select onchange="S.ed.exp.comp=this.value;edPreview()"><option value="tukey" ${e.comp!=='dunnett'?'selected':''}>全部两两比较（Tukey）</option><option value="dunnett" ${e.comp==='dunnett'?'selected':''}>各组 vs 对照（Dunnett）</option></select><span class="hint">只关心与对照的差异时选 Dunnett</span></label>
     <label class="f w2">备注<input value="${esc(e.notes)}" oninput="S.ed.exp.notes=this.value" placeholder="处理条件、批次、引物等"></label>
   </div></div></div>
   <div class="ed-grid">
@@ -813,13 +816,19 @@ function dlgSettings() {
 function quitApp() { api('/api/shutdown', {}).finally(() => { document.body.innerHTML = '<div class="empty" style="padding-top:20vh"><h3>qPCR 数据中心已退出</h3><p>可以关闭这个页面了。</p></div>' }) }
 
 // ------------------------------------------------------------ 启动
+// 每个标签页一个编号，全部关闭后本地服务自动退出
+const TAB = Math.random().toString(36).slice(2)
+function ping() { fetch('/api/ping?tab=' + TAB).catch(() => {}) }
+addEventListener('pagehide', () => navigator.sendBeacon('/api/bye?tab=' + TAB))
+addEventListener('pageshow', e => { if (e.persisted) ping() })
 ;(async () => {
   try {
     S.meta = await api('/api/meta')
     await loadProjects()
     go('home')
   } catch (e) { $('#main').innerHTML = `<div class="page"><div class="notes">无法连接本地服务：${esc(e.message)}</div></div>` }
-  setInterval(() => fetch('/api/ping').catch(() => {}), 20000)
+  ping()
+  setInterval(ping, 5000)
 })()
 </script>
 </body>

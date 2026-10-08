@@ -27,9 +27,9 @@ APP_NAME = 'qPCR 数据中心'
 AUTHOR = '自动挡赛车手制作'
 
 EXP_COLS = ['实验ID', '实验名称', '实验内容', '日期', '内参基因', '归一组', 'QC阈值',
-            '离散指标', '剔除离群', '统计值', '原始文件', '备注', '创建时间', '更新时间', '作图设置']
+            '离散指标', '剔除离群', '统计值', '比较方式', '原始文件', '备注', '创建时间', '更新时间', '作图设置']
 EXP_KEYS = ['id', 'name', 'category', 'date', 'ref', 'ctrl', 'thr',
-            'metric', 'drop', 'statval', 'files', 'notes', 'created', 'updated', 'plot']
+            'metric', 'drop', 'statval', 'comp', 'files', 'notes', 'created', 'updated', 'plot']
 WELL_COLS = ['实验ID', '来源文件', '孔位', '荧光', '基因', '类型', '样本', 'Cq', '手动剔除']
 WELL_KEYS = ['exp', 'file', 'well', 'fluor', 'target', 'content', 'sample', 'cq', 'excluded']
 GSET_COLS = ['实验ID', '分组', '顺序', '系列', '时间点', '颜色']
@@ -228,6 +228,7 @@ class Store:
             e['drop'] = e['drop'] in ('是', 'True', 'true', '1')
             e['metric'] = 'range' if e['metric'] in ('极差', 'range') else 'sd'
             e['statval'] = 'rqs' if e['statval'] in ('RQ', 'rqs') else 'dcts'
+            e['comp'] = 'dunnett' if e['comp'] in ('Dunnett', 'dunnett') else 'tukey'
             p.experiments.append(e)
         for w in _table(sheets.get('原始孔', []), WELL_KEYS, WELL_COLS):
             eid = _cell_str(w['exp'])
@@ -414,7 +415,7 @@ class Store:
         sum_rows = [H(['实验ID', '实验名称', '实验内容', '基因', '分组', 'n', 'RQ均值', 'SEM', 'SD',
                        'log2FC', 'p(vs对照)', '显著性', '字母', '检验方法'])]
         stat_rows = [H(['实验ID', '实验名称', '基因', '方法', '总体p', '比较', 'p', '显著性'])]
-        method_name = {'t-test': 'Welch t 检验', 'anova': '单因素 ANOVA + Tukey HSD'}
+        method_name = q.METHOD_NAMES
 
         for e in p.experiments:
             eid = e['id']
@@ -424,6 +425,7 @@ class Store:
                 '极差' if e.get('metric') == 'range' else 'SD',
                 '是' if e.get('drop', True) else '否',
                 'RQ' if e.get('statval') == 'rqs' else 'ΔCt',
+                'Dunnett' if e.get('comp') == 'dunnett' else 'Tukey',
                 ' | '.join(e.get('files') or []), e.get('notes', ''),
                 e.get('created', ''), e.get('updated', ''),
                 json.dumps(e.get('plot') or {}, ensure_ascii=False)])
@@ -488,13 +490,13 @@ class Store:
                  ['ΔΔCt', 'ΔCt = Cq(目的) − Cq(内参)，ΔΔCt = ΔCt − mean(ΔCt 归一组)，RQ = 2^(−ΔΔCt)'],
                  ['log2FC', 'log2FC = −mean(ΔΔCt)，即组内 RQ 几何均值的 log2'],
                  ['技术重复QC', '同一样本×基因的复孔 SD（或极差）超过阈值判为离散，可开启三选二自动剔除离群孔'],
-                 ['显著性', '2 组用 Welch t 检验，≥3 组用单因素 ANOVA + Tukey HSD，字母法中 a 给 RQ 最高组'],
+                 ['显著性', '均为参数检验，假定各组方差相等。2 组用 Student t 检验。≥3 组先做单因素 ANOVA，再按实验目录「比较方式」做多重比较：Tukey 为全部两两比较并给字母（a 给 RQ 最高组），Dunnett 只比较各组与对照、只给星号'],
                  ['星号', '* p<0.05，** p<0.01，*** p<0.001，ns 不显著'],
                  ['生成程序', f'{APP_NAME}（{AUTHOR}）']]
 
         return [
             ('项目信息', info, opt([14, 60])),
-            ('实验目录', exp_rows, opt([8, 22, 14, 12, 10, 12, 8, 8, 8, 8, 40, 30, 16, 16, 30])),
+            ('实验目录', exp_rows, opt([8, 22, 14, 12, 10, 12, 8, 8, 8, 8, 9, 40, 30, 16, 16, 30])),
             ('原始孔', well_rows, opt([8, 36, 7, 7, 12, 7, 16, 9, 9])),
             ('样本分组', samp_rows, opt([8, 18, 16])),
             ('分组设置', gset_rows, opt([8, 16, 7, 12, 10, 10])),

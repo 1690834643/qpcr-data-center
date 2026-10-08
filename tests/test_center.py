@@ -69,6 +69,20 @@ class StoreTest(unittest.TestCase):
         self.assertNotIn('', {r['sample'] for r in a['qc']})
         self.assertTrue(any('NTC' in x for x in a['warnings']))
 
+    def test_dunnett_option(self):
+        """选 Dunnett 后只比各组 vs 对照，不给字母，设置能存回 Excel。"""
+        e = dict(EXP, id=self.eid, comp='dunnett')
+        self.st.save_experiment('测试项目', e, self.wells, self.samples, [])
+        st = self.fresh()
+        p = st.load('测试项目')
+        self.assertEqual(p.exp(self.eid)['comp'], 'dunnett')
+        a = st.analysis(p, self.eid)
+        s = a['genes']['STAT3']['stats']
+        self.assertEqual(s['method'], 'dunnett')
+        self.assertEqual(s['letters'], {})
+        self.assertTrue(all(c['group_j'] == 'siNC' for c in s['pairwise']))
+        self.assertIn('Dunnett', a['methods_text'])
+
     def test_excel_resave_roundtrip(self):
         """用户在 Excel 里改了分组与日期后，重新打开按新数据重算。"""
         try:
@@ -151,6 +165,24 @@ class UnitTest(unittest.TestCase):
         self.assertLessEqual(t[0], -3.4)
         self.assertGreaterEqual(t[-1], 2.1)
         self.assertIn(0, t)
+
+    def test_dunnett_reference(self):
+        """Dunnett p 与高精度多元 t 积分（scipy multivariate_t，2e7 次采样）一致。"""
+        _, comps = q.dunnett([0.1, -0.4, 0.3, 0.0], [[1.5, 1.1, 1.9], [-0.2, 0.4, 0.1, -0.5, 0.3]])
+        self.assertAlmostEqual(comps[0]['t'], 5.547528818117303, places=10)
+        self.assertAlmostEqual(comps[0]['p'], 0.00067007, places=6)
+        self.assertAlmostEqual(comps[1]['p'], 0.99484692, places=6)
+
+    def test_two_groups_student(self):
+        r = q.run_stats({'a': {'dcts': [1.5, 1.1, 1.9]}, 'b': {'dcts': [0.1, -0.4, 0.3, 0.0]}})
+        self.assertEqual(r['method'], 't-test')
+        self.assertAlmostEqual(r['p'], 0.002203563724022782, places=8)
+
+    def test_holm(self):
+        out = q.holm_adjust([0.01, 0.04, 0.03, float('nan'), 0.2])
+        for x, y in zip([out[i] for i in (0, 1, 2, 4)], [0.04, 0.09, 0.09, 0.2]):
+            self.assertAlmostEqual(x, y)
+        self.assertNotEqual(out[3], out[3])
 
     def test_csv_parse(self):
         ws = q.parse_cfx(sorted(glob.glob(os.path.join(EXAMPLES, '*.csv')))[0])

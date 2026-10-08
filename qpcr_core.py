@@ -131,27 +131,6 @@ def f_pvalue(F, df1, df2):
     return betai(df2 / 2.0, df1 / 2.0, x)
 
 
-def welch_ttest(a, b):
-    """Welch 不等方差 t 检验。返回 (t, df, p_twosided)。"""
-    n1, n2 = len(a), len(b)
-    if n1 < 2 or n2 < 2:
-        return float('nan'), float('nan'), float('nan')
-    m1, m2 = mean(a), mean(b)
-    v1, v2 = variance(a), variance(b)
-    se = math.sqrt(v1 / n1 + v2 / n2)
-    if se == 0:
-        # 两组都恒定：均值相等 -> 无差异(p=1)；均值不等 -> 完全分离(p=0)
-        if m1 == m2:
-            return 0.0, float(n1 + n2 - 2), 1.0
-        return (float('inf') if m1 > m2 else float('-inf')), float(n1 + n2 - 2), 0.0
-    t = (m1 - m2) / se
-    num = (v1 / n1 + v2 / n2) ** 2
-    den = (v1 / n1) ** 2 / (n1 - 1) + (v2 / n2) ** 2 / (n2 - 1)
-    df = num / den if den > 0 else (n1 + n2 - 2)
-    p = t_pvalue_twosided(t, df)
-    return t, df, p
-
-
 def student_ttest(a, b):
     """Student 等方差 t 检验（合并方差）。返回 (t, df, p_twosided)。"""
     n1, n2 = len(a), len(b)
@@ -334,6 +313,79 @@ def tukey_hsd(groups, labels=None):
             comps.append({'i': i, 'j': j, 'label_i': labels[i], 'label_j': labels[j],
                           'diff': diff, 'q': q, 'p': p})
     return av, comps
+
+
+def _p_max_abs_t(c, lams, df):
+    """Dunnett 用：P(max_j |T_j| <= c)，T_j 为相关系数 lam_i*lam_j 的多元 t，自由度 df。
+    先对公共正态分量 z 积分，再对 s ~ sqrt(chi2_df/df) 积分。"""
+    if c <= 0:
+        return 0.0
+    rs = [math.sqrt(1.0 - l * l) for l in lams]
+
+    def given_x(x):
+        def fz(z):
+            prod = _phi(z)
+            for l, r in zip(lams, rs):
+                prod *= _Phi((x - l * z) / r) - _Phi((-x - l * z) / r)
+                if prod <= 0:
+                    return 0.0
+            return prod
+        total = 0.0
+        for i in range(4):
+            a = -8.0 + 4.0 * i
+            total += _integrate(fz, a, a + 4.0)
+        return total
+
+    if df > 2000:
+        return min(1.0, max(0.0, given_x(c)))
+    half_df = df / 2.0
+    log_const = math.log(2.0) + half_df * math.log(half_df) - math.lgamma(half_df)
+
+    def fs(s):
+        if s <= 0:
+            return 0.0
+        return math.exp(log_const + (df - 1) * math.log(s) - half_df * s * s) * given_x(c * s)
+
+    hi = 1.0 + 8.0 / math.sqrt(df) + 0.5
+    n_seg = 8
+    step = hi / n_seg
+    total = sum(_integrate(fs, i * step, (i + 1) * step) for i in range(n_seg))
+    return min(1.0, max(0.0, total))
+
+
+def dunnett(control, others):
+    """Dunnett 多重比较：各处理组与对照组比较，双侧，合并方差来自全部组的 ANOVA。
+    control: list[float]，others: list[list[float]]。
+    返回 (anova_dict, comparisons)，comparisons 为 list of dict(j, diff, t, p)，j 为 others 下标。"""
+    av = oneway_anova([control] + list(others))
+    msw, df = av['msw'], av['df2']
+    n0 = len(control)
+    m0 = mean(control)
+    lams = [math.sqrt(len(g) / (len(g) + n0)) for g in others]
+    comps = []
+    for j, g in enumerate(others):
+        diff = mean(g) - m0
+        se = math.sqrt(msw * (1.0 / len(g) + 1.0 / n0)) if msw > 0 else 0.0
+        if se > 0:
+            t = diff / se
+            p = 1.0 - _p_max_abs_t(abs(t), lams, df)
+        else:
+            t = 0.0 if diff == 0 else math.copysign(float('inf'), diff)
+            p = 1.0 if diff == 0 else 0.0
+        comps.append({'j': j, 'diff': diff, 't': t, 'p': min(1.0, max(0.0, p))})
+    return av, comps
+
+
+def holm_adjust(ps):
+    """Holm 逐步校正。NaN 原样保留，只在有效 p 值之间校正，返回同序列表。"""
+    valid = sorted((p, i) for i, p in enumerate(ps) if p == p)
+    m = len(valid)
+    out = list(ps)
+    running = 0.0
+    for rank, (p, i) in enumerate(valid):
+        running = max(running, min(1.0, (m - rank) * p))
+        out[i] = running
+    return out
 
 
 def compact_letter_display(labels, sig_pairs, order_by=None):
@@ -920,16 +972,25 @@ def compute_ddct(groups, ref_target, control_group, group_of=None,
     }
 
 
-def run_stats(per_group_target, value_key='dcts', control_group=None, alpha=0.05):
-    """对一个基因的各组做统计检验。
+METHOD_NAMES = {
+    't-test': 'Student t 检验',
+    'anova': '单因素 ANOVA + Tukey HSD',
+    'dunnett': '单因素 ANOVA + Dunnett（各组 vs 对照）',
+}
+
+
+def run_stats(per_group_target, value_key='dcts', control_group=None, alpha=0.05, comp='tukey'):
+    """对一个基因的各组做统计检验。均为参数检验，假定各组方差相等。
     per_group_target: dict{group: {dcts:[...], rqs:[...], ...}}。
     value_key: 用于检验的值（默认 'dcts'，统计学上更规范；也可用 'rqs'）。
+    comp: ≥3 组时的多重比较方式，'tukey' 全部两两比较，'dunnett' 只比各组与对照
+          （对照组不足 2 个重复时退回 Tukey）。
     返回 dict:
-      method  : 't-test' / 'anova'
+      method  : 't-test' / 'anova' / 'dunnett'
       n_groups
       p       : 总体 p（t 检验的 p 或 ANOVA 的 p）
-      pairwise: list of dict(group_i, group_j, p, stars)   （ANOVA 时为 Tukey）
-      letters : dict{group: 字母}  （仅多组）
+      pairwise: list of dict(group_i, group_j, p, stars)   （Tukey 为全部两两，Dunnett 只含 vs 对照）
+      letters : dict{group: 字母}  （Dunnett 时为空，字母法只适用全部两两比较）
       stars_vs_control: dict{group: stars}  （有对照组时，各组 vs 对照）
     """
     gnames = list(per_group_target.keys())
@@ -951,7 +1012,7 @@ def run_stats(per_group_target, value_key='dcts', control_group=None, alpha=0.05
               'stars_vs_control': {}}
 
     if len(gnames) == 2:
-        t, df, p = welch_ttest(data[0], data[1])
+        t, df, p = student_ttest(data[0], data[1])
         result['method'] = 't-test'
         result['p'] = p
         result['pairwise'] = [{'group_i': gnames[0], 'group_j': gnames[1],
@@ -961,6 +1022,16 @@ def run_stats(per_group_target, value_key='dcts', control_group=None, alpha=0.05
         if p < alpha:
             sig.add(frozenset({0, 1}))
         result['letters'] = compact_letter_display(gnames, sig, order_by=[means_for_order[g] for g in gnames])
+    elif comp == 'dunnett' and control_group in gnames:
+        ci = gnames.index(control_group)
+        others = [g for g in gnames if g != control_group]
+        av, comps = dunnett(data[ci], [data[gnames.index(g)] for g in others])
+        result['method'] = 'dunnett'
+        result['p'] = av['p']
+        result['anova'] = av
+        for c in comps:
+            result['pairwise'].append({'group_i': others[c['j']], 'group_j': control_group,
+                                       'p': c['p'], 'stars': p_to_stars(c['p'])})
     else:
         av, comps = tukey_hsd(data, labels=gnames)
         result['method'] = 'anova'

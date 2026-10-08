@@ -343,6 +343,8 @@ def _annot_for(stats, o, n_groups):
     a = o['annot']
     if a == 'auto':
         a = 'star' if n_groups <= 2 else 'letter'
+    if not stats['letters']:  # Dunnett 只比对照，没有字母法
+        a = 'star'
     return (stats['letters'], None) if a == 'letter' else (None, stats['stars_vs_control'])
 
 
@@ -762,23 +764,26 @@ def _plot_line(a, o, gsets):
             else:
                 svg.circle(px, py, r * 1.25, c, '#FFFFFF', 0.5)
 
-    # 显著性：多条系列时逐时间点比较各系列，单系列时用整体字母法
+    # 显著性：多条系列时逐时间点比较各系列（Holm 校正时间点间多重比较），单系列时用整体字母法
     if any_annot:
         if nser == 1:
-            letters = gd['stats']['letters'] if gd['stats']['method'] else {}
+            st = gd['stats'] if gd['stats']['method'] else {}
+            marks = st.get('letters') or {g: s for g, s in (st.get('stars_vs_control') or {}).items() if s}
             for g in groups:
-                if g in letters and g in data:
-                    svg.text(x2p(x_of[g]), top_at_x[x_of[g]] - fs * 0.6, letters[g], size=fs)
+                if g in marks and g in data:
+                    svg.text(x2p(x_of[g]), top_at_x[x_of[g]] - fs * 0.6, marks[g], size=fs)
         else:
             sv = a['params']['statval']
+            tested = []
             for x in xs_raw:
                 sub = {series_of[g]: gd['groups'][g] for g in groups if x_of[g] == x and g in gd['groups']}
                 if len(sub) < 2:
                     continue
                 res = q.run_stats(sub, value_key=sv)
-                if res['method'] is None:
-                    continue
-                lab = q.p_to_stars(res['p'])
+                if res['method'] is not None:
+                    tested.append((x, res['p']))
+            for (x, _), padj in zip(tested, q.holm_adjust([p for _, p in tested])):
+                lab = q.p_to_stars(padj)
                 if lab != 'ns' or o['annot'] in ('star', 'letter'):
                     svg.text(x2p(x), top_at_x[x] - fs * 0.5, lab, size=fs * 1.05, weight='600' if lab != 'ns' else None)
 
