@@ -1,0 +1,47 @@
+name: Build macOS
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 上传到哪个 Release（tag 名）
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - runner: macos-14
+            arch: arm64
+          - runner: macos-15-intel
+            arch: intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: 单元测试
+        run: python -m unittest discover -s tests
+      - name: 打包
+        run: bash 打包成mac.sh ${{ matrix.arch }}
+      - name: 启动检查
+        run: |
+          "/tmp/"qpcr_center_build.*/dist/qPCR数据中心.app/Contents/MacOS/qPCR数据中心 --no-browser &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8765/api/ping && curl -sf http://127.0.0.1:8765/ | grep -q '<html' && exit 0
+            sleep 1
+          done
+          exit 1
+      - name: 上传到 Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name || inputs.tag }}" qPCR-Data-Center-macOS-${{ matrix.arch }}.dmg --clobber

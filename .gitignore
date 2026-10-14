@@ -7,3 +7,4 @@ dist/
 .分析缓存.json
 .备份/
 tests_local/
+*.dmg

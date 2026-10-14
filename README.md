@@ -4,7 +4,7 @@
 
 > 作者：自动挡赛车手 · 欢迎关注 [小红书](https://xhslink.cn/o/7cvSv9Sy6du) / [B站](https://b23.tv/MmJWHWo)
 
-A local-first data hub for Bio-Rad CFX96 qPCR exports. It organizes runs by project, performs replicate QC, ΔΔCt relative quantification, and statistical testing, and renders journal-style figures. Everything is stored in plain Excel workbooks. Pure Python standard library, zero third-party dependencies, shipped as a single Windows exe.
+A local-first data hub for Bio-Rad CFX96 qPCR exports. It organizes runs by project, performs replicate QC, ΔΔCt relative quantification, and statistical testing, and renders journal-style figures. Everything is stored in plain Excel workbooks. Pure Python standard library, zero third-party dependencies, shipped as a single Windows exe and a macOS app.
 
 ![作图界面](docs/screenshots/plot_bar.png)
 
@@ -13,6 +13,8 @@ A local-first data hub for Bio-Rad CFX96 qPCR exports. It organizes runs by proj
 到 [Releases](../../releases) 下载 `qPCR-Data-Center.exe`，双击即用，不需要安装 Python。同一页面的 `example-data.zip` 是示例数据，可以拿来试用。
 
 首次打开如果弹出「Windows 已保护你的电脑」，点「更多信息」再点「仍要运行」（程序没有购买代码签名证书）。
+
+**macOS**：同一页面下载 dmg，Apple 芯片（M1 及以后）选 `qPCR-Data-Center-macOS-arm64.dmg`，Intel 芯片选 `qPCR-Data-Center-macOS-intel.dmg`。打开 dmg 后把「qPCR数据中心」拖进「应用程序」，双击即在浏览器打开界面（程序不显示 Dock 图标，网页全部关闭后自动退出）。首次打开会提示「无法验证开发者」，到「系统设置 → 隐私与安全性」底部点「仍要打开」即可，也可以在终端执行 `xattr -dr com.apple.quarantine /Applications/qPCR数据中心.app`。数据默认存放在 `~/Documents/qPCR数据库/`。
 
 ## 功能
 
@@ -46,7 +48,7 @@ A local-first data hub for Bio-Rad CFX96 qPCR exports. It organizes runs by proj
 
 ## 数据存在哪
 
-默认在 `我的文档\qPCR数据库\`，可在「设置」中修改。每个项目一个文件夹，内含同名 xlsx 总表、`原始文件/`（导入时归档的 CFX 原文件）、`图/`（导出的图）和 `.备份/`（最近 20 份历史版本）。
+默认在 `我的文档\qPCR数据库\`（macOS 为 `~/Documents/qPCR数据库/`），可在「设置」中修改。每个项目一个文件夹，内含同名 xlsx 总表、`原始文件/`（导入时归档的 CFX 原文件）、`图/`（导出的图）和 `.备份/`（最近 20 份历史版本）。
 
 ## 计算口径
 
@@ -64,7 +66,7 @@ python qpcr_server.py            # 启动并自动打开浏览器
 python -m unittest discover -s tests
 ```
 
-Windows 下双击 `打包成exe.bat` 即可用 PyInstaller 打成单个 exe。
+Windows 下双击 `打包成exe.bat` 即可用 PyInstaller 打成单个 exe。macOS 下运行 `bash 打包成mac.sh` 得到 dmg，GitHub 上每次发布 Release 会由 Actions 自动打好 Apple 芯片与 Intel 两版 dmg 并附到该 Release。
 
 | 文件 | 作用 |
 |---|---|
